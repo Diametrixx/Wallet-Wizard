@@ -8,26 +8,59 @@ import { analyzeSolanaWallet } from "./services/solana";
 import { getPriceData } from "./services/prices";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize database
+  try {
+    const { initializeDatabase } = await import('./db');
+    await initializeDatabase();
+    console.log('Database initialization complete');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+  }
+
   // API endpoint to analyze a wallet
   app.post("/api/analyze", async (req, res) => {
     try {
       // Validate the request body
       const walletData = walletSchema.parse(req.body);
       
+      // Import storage to check cache
+      const { storage } = await import('./storage');
+      
+      // Check for cached data first
+      console.log(`Checking cache for wallet ${walletData.address} on ${walletData.chain} chain`);
+      const cachedPortfolio = await storage.getPortfolioByWalletAddress(
+        walletData.address, 
+        walletData.chain
+      );
+      
+      // If we have cached data that's less than 30 minutes old, return it
+      if (cachedPortfolio) {
+        console.log(`Found cached portfolio data for ${walletData.address}, using it`);
+        return res.json(cachedPortfolio);
+      }
+      
+      console.log(`No cached data found for ${walletData.address}, analyzing wallet`);
+      
       // Call the appropriate service based on the chain
+      let portfolioData: Portfolio;
+      
       if (walletData.chain === "ethereum") {
-        const portfolioData = await analyzeEthereumWallet(walletData.address);
-        res.json(portfolioData);
+        portfolioData = await analyzeEthereumWallet(walletData.address);
       } else if (walletData.chain === "solana") {
-        const portfolioData = await analyzeSolanaWallet(walletData.address);
-        res.json(portfolioData);
+        portfolioData = await analyzeSolanaWallet(walletData.address);
       } else {
         throw new Error("Unsupported blockchain");
       }
+      
+      // Save the portfolio data to cache
+      await storage.savePortfolio(portfolioData);
+      
+      res.json(portfolioData);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Invalid wallet data", errors: error.errors });
       } else {
+        console.error('Error analyzing wallet:', error);
         res.status(500).json({ message: (error as Error).message || "An error occurred analyzing the wallet" });
       }
     }

@@ -38,7 +38,7 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
       amount: balanceEth,
       price: 0, // Will be updated with real price later
       value: 0, // Will be calculated
-      percentChange: 0, // Will be updated with real price change later
+      change24h: 0, // Will be updated with real price change later
       logoUrl: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg',
     }];
     
@@ -234,9 +234,9 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
         let type: Transaction["type"] = "other";
         
         if (tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
-          type = "sent";
+          type = "send";
         } else if (tx.to && tx.to.toLowerCase() === address.toLowerCase()) {
-          type = "received";
+          type = "receive";
         }
         
         // Simple heuristic for detecting swap transactions (not 100% accurate)
@@ -244,7 +244,7 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
         if (tx.input && tx.input.startsWith('0x')) {
           if (tx.input.includes('swap') || tx.input.includes('trade') || 
               (tx.to && tx.to.toLowerCase() === '0x7a250d5630b4cf539739df2c5dacb4c659f2488d')) { // Uniswap V2 Router
-            type = "swapped";
+            type = "swap";
           }
         }
         

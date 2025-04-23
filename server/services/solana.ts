@@ -67,10 +67,11 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
       }
     }
     
-    // Get token prices from CoinGecko
+    // Fetch token prices from storage (cache) or CoinGecko
     try {
-      const symbols = tokens.map(t => t.symbol.toLowerCase());
-      console.log(`Fetching prices for Solana tokens: ${symbols.join(', ')}`);
+      // Get list of token symbols
+      const tokenSymbols = tokens.map(token => token.symbol.toLowerCase());
+      console.log(`Fetching prices for ${tokenSymbols.length} Solana tokens: ${tokenSymbols.slice(0, 10).join(', ')}${tokenSymbols.length > 10 ? '...' : ''}`);
       
       // Ensure SOL has a baseline price if it's in the tokens list
       let solToken = tokens.find(t => t.symbol.toLowerCase() === 'sol');
@@ -82,32 +83,77 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
         console.log(`Set baseline price for SOL: $${solToken.price}`);
       }
       
-      const priceData = await getPriceData(symbols);
+      // Import storage for token price caching
+      const { storage } = await import('../storage');
+      
+      // Get whitelisted tokens (popular tokens first)
+      const whitelistedTokens = await storage.getWhitelistedTokens();
+      
+      // Prioritize tokens: 1) SOL, 2) Whitelisted tokens, 3) Other tokens with significant balance (value > $5)
+      const solIndex = tokenSymbols.findIndex(s => s.toLowerCase() === 'sol');
+      if (solIndex !== -1) {
+        // Move SOL to the front
+        tokenSymbols.splice(solIndex, 1);
+        tokenSymbols.unshift('sol');
+      }
+      
+      // Sort other tokens based on whitelist priority and balance
+      const filteredAndSorted = tokenSymbols
+        .filter(symbol => symbol.toLowerCase() !== 'sol') // SOL already handled
+        .sort((a, b) => {
+          const aIsWhitelisted = whitelistedTokens.includes(a.toUpperCase());
+          const bIsWhitelisted = whitelistedTokens.includes(b.toUpperCase());
+          
+          if (aIsWhitelisted && !bIsWhitelisted) return -1;
+          if (!aIsWhitelisted && bIsWhitelisted) return 1;
+          
+          // If both are whitelisted or both are not, sort by amount
+          const tokenA = tokens.find(t => t.symbol.toLowerCase() === a.toLowerCase());
+          const tokenB = tokens.find(t => t.symbol.toLowerCase() === b.toLowerCase());
+          
+          const aAmount = tokenA?.amount || 0;
+          const bAmount = tokenB?.amount || 0;
+          
+          return bAmount - aAmount; // Sort descending by amount
+        })
+        .slice(0, 15); // Limit to 15 tokens (plus SOL) to avoid rate limits
+      
+      // Final list of tokens to fetch prices for: SOL + sorted tokens
+      const prioritizedSymbols = ['sol', ...filteredAndSorted];
+      
+      // Get cached or fetch new prices
+      const priceData = await storage.getCachedOrFetchPrices(prioritizedSymbols);
       
       // Update token prices and calculate values
-      for (const token of tokens) {
+      tokens.forEach(token => {
         const symbol = token.symbol.toLowerCase();
         const priceInfo = priceData[symbol];
         
         if (priceInfo && priceInfo.usd > 0) {
           token.price = priceInfo.usd;
           token.change24h = priceInfo.usd_24h_change || 0;
-          token.value = token.amount * token.price;
+          token.value = token.price * token.amount;
           console.log(`Updated price for ${token.symbol}: $${token.price}`);
         } else if (token.symbol.toLowerCase() !== 'sol') {
           // For non-SOL tokens with no price data
-          if (token.symbol.toLowerCase() !== 'unknown') {
+          // Assign a small value for tokens without prices but with balance
+          if (token.amount > 0) {
+            // Assign a proportional minimal value based on token amount to improve visualization
+            // Higher token amounts are likely airdrops or memecoins with very low value
+            const magnitude = Math.log10(token.amount);
+            const minPrice = Math.max(0.0001, 0.1 / Math.pow(10, magnitude));
+            token.price = minPrice;
+            token.value = token.price * token.amount;
+            token.change24h = 0;
+            
+            if (token.symbol.toLowerCase() !== 'unknown') {
+              console.log(`No price data found for ${token.symbol}, assigned minimal value: $${token.price}`);
+            }
+          } else {
             console.log(`No price data found for ${token.symbol}`);
           }
-          
-          // For tokens without prices, assign a small value
-          // This ensures they show up in allocation charts
-          if (token.amount > 0) {
-            token.price = 0.01; // Small symbolic price
-            token.value = token.amount * token.price;
-          }
         }
-      }
+      });
     } catch (error) {
       console.error('Error fetching Solana token prices:', error);
     }
