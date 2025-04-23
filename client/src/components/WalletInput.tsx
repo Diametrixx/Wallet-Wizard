@@ -69,18 +69,18 @@ export default function WalletInput({ onAnalyze, error }: WalletInputProps) {
                 size="sm"
                 variant={selectedChain === "ethereum" ? "default" : "outline"}
                 className={selectedChain === "ethereum" 
-                  ? "bg-cyber-blue text-black" 
+                  ? "bg-cyber-blue text-black font-bold" 
                   : "bg-cyber-dark text-cyber-blue border-cyber-blue/30 hover:bg-cyber-blue/20"
                 }
                 onClick={() => setSelectedChain("ethereum")}
               >
-                Bitcoin
+                Ethereum
               </Button>
               <Button 
                 size="sm"
                 variant={selectedChain === "solana" ? "default" : "outline"}
                 className={selectedChain === "solana" 
-                  ? "bg-cyber-purple text-black" 
+                  ? "bg-cyber-purple text-black font-bold" 
                   : "bg-cyber-dark text-cyber-purple border-cyber-purple/30 hover:bg-cyber-purple/20"
                 }
                 onClick={() => setSelectedChain("solana")}
@@ -120,8 +120,8 @@ export default function WalletInput({ onAnalyze, error }: WalletInputProps) {
         
         <div className="mt-6 grid grid-cols-3 gap-4">
           <div className="cyber-card p-3 text-center">
-            <Bitcoin className="w-10 h-10 mx-auto mb-1 text-cyber-blue" />
-            <p className="text-xs text-gray-300">Bitcoin</p>
+            <Wallet className="w-10 h-10 mx-auto mb-1 text-cyber-blue" />
+            <p className="text-xs text-gray-300">Ethereum</p>
           </div>
           <div className="cyber-card p-3 text-center">
             <Coins className="w-10 h-10 mx-auto mb-1 text-cyber-purple" />
@@ -145,7 +145,7 @@ export default function WalletInput({ onAnalyze, error }: WalletInputProps) {
               <Wallet size={20} />
             </div>
             <h4 className="text-sm font-bold mb-1">Enter Address</h4>
-            <p className="text-xs text-gray-400">Paste your Bitcoin or Solana wallet address</p>
+            <p className="text-xs text-gray-400">Paste your Ethereum or Solana wallet address</p>
           </div>
           <div className="bg-cyber-dark/50 p-4 rounded-md">
             <div className="text-cyber-blue text-lg mb-2">

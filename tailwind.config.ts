@@ -61,6 +61,16 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // Cyberpunk theme colors
+        "cyber-black": "var(--cyber-black)",
+        "cyber-dark": "var(--cyber-dark)",
+        "cyber-gray": "var(--cyber-gray)",
+        "cyber-blue": "var(--cyber-blue)",
+        "cyber-green": "var(--cyber-green)",
+        "cyber-pink": "var(--cyber-pink)",
+        "cyber-purple": "var(--cyber-purple)",
+        "cyber-yellow": "var(--cyber-yellow)",
+        "cyber-red": "var(--cyber-red)",
       },
       keyframes: {
         "accordion-down": {
