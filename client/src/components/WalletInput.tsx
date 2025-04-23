@@ -132,7 +132,7 @@ export default function WalletInput({ onAnalyze, error }: WalletInputProps) {
               <path d="M12 17a2 2 0 100-4 2 2 0 000 4z" fill="currentColor" />
               <path fillRule="evenodd" clipRule="evenodd" d="M7 10V7a5 5 0 0110 0v3a5.001 5.001 0 013 4.584V19a5.006 5.006 0 01-5 5H9a5.006 5.006 0 01-5-5v-4.416A5.001 5.001 0 017 10zm5-7a3 3 0 00-3 3v3h6V7a3 3 0 00-3-3zm5 10a3 3 0 01-3 3h-4a3 3 0 110-6h4a3 3 0 013 3z" fill="currentColor" />
             </svg>
-            <p className="text-xs text-gray-300">Private</p>
+            <p className="text-xs text-gray-300">Others</p>
           </div>
         </div>
       </div>

@@ -14,25 +14,7 @@ export default function Header() {
             <h1 className="font-pixel text-xl tracking-wider text-cyber-green cyber-glow">WALLET WIZARD</h1>
           </div>
         </Link>
-        
-        <div className="flex space-x-4">
-          <Button 
-            variant="outline" 
-            className="bg-cyber-dark border-cyber-purple/30 text-cyber-purple hover:bg-cyber-purple/20"
-          >
-            <span className="flex items-center">
-              <i className="mr-2">?</i>Help
-            </span>
-          </Button>
-          <Button 
-            variant="outline" 
-            className="bg-cyber-dark border-cyber-green/30 text-cyber-green hover:bg-cyber-green/20"
-          >
-            <span className="flex items-center">
-              <i className="mr-2">i</i>About
-            </span>
-          </Button>
-        </div>
+      
       </div>
     </header>
   );

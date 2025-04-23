@@ -2,44 +2,96 @@ import axios from "axios";
 import type { Portfolio, Token, Transaction } from "@shared/schema";
 import { getPriceData } from "./prices";
 
-// Use Covalent API (free tier)
-const COVALENT_API_KEY = process.env.COVALENT_API_KEY || "";
-const COVALENT_BASE_URL = "https://api.covalenthq.com/v1";
+// Use Etherscan API 
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
+const ETHERSCAN_BASE_URL = "https://api.etherscan.io/api";
 
 /**
  * Analyzes an Ethereum wallet to generate portfolio data
  */
 export async function analyzeEthereumWallet(address: string): Promise<Portfolio> {
   try {
-    // Get token balances and basic data
-    const balancesUrl = `${COVALENT_BASE_URL}/1/address/${address}/balances_v2/?key=${COVALENT_API_KEY}`;
-    const balancesResponse = await axios.get(balancesUrl);
-    const balances = balancesResponse.data.data.items;
+    // Get ETH balance
+    const ethBalanceUrl = `${ETHERSCAN_BASE_URL}?module=account&action=balance&address=${address}&tag=latest&apikey=${ETHERSCAN_API_KEY}`;
+    const ethBalanceResponse = await axios.get(ethBalanceUrl);
+    const ethBalanceWei = ethBalanceResponse.data.result;
+    const ethBalance = parseInt(ethBalanceWei) / 1e18; // Convert wei to ETH
+    
+    // Get ERC20 token balances
+    const tokenBalancesUrl = `${ETHERSCAN_BASE_URL}?module=account&action=tokenbalance&address=${address}&tag=latest&apikey=${ETHERSCAN_API_KEY}`;
+    const erc20BalancesUrl = `${ETHERSCAN_BASE_URL}?module=account&action=tokentx&address=${address}&startblock=0&endblock=999999999&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
+    const erc20Response = await axios.get(erc20BalancesUrl);
+    
+    // Process ERC20 transactions to determine token balances (Etherscan doesn't have a direct balances endpoint)
+    const tokenMap = new Map<string, any>();
+    
+    // Process ERC-20 token transactions to calculate balances
+    if (erc20Response.data.status === "1" && erc20Response.data.result) {
+      const erc20Txs = erc20Response.data.result;
+      
+      // Calculate token balances from transaction history
+      for (const tx of erc20Txs) {
+        const tokenAddress = tx.contractAddress.toLowerCase();
+        const tokenSymbol = tx.tokenSymbol;
+        const tokenName = tx.tokenName;
+        const tokenDecimals = parseInt(tx.tokenDecimal);
+        
+        // Handle token transfers
+        if (!tokenMap.has(tokenAddress)) {
+          tokenMap.set(tokenAddress, {
+            symbol: tokenSymbol,
+            name: tokenName,
+            decimals: tokenDecimals,
+            contractAddress: tokenAddress,
+            amount: 0,
+            price: 0, 
+            value: 0,
+            change24h: 0,
+            logoUrl: `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${tokenAddress}/logo.png`,
+          });
+        }
+        
+        const tokenBalance = tokenMap.get(tokenAddress);
+        const amount = parseInt(tx.value) / Math.pow(10, tokenDecimals);
+        
+        // If the address is the receiver, add the amount
+        if (tx.to.toLowerCase() === address.toLowerCase()) {
+          tokenBalance.amount += amount;
+        }
+        // If the address is the sender, subtract the amount
+        else if (tx.from.toLowerCase() === address.toLowerCase()) {
+          tokenBalance.amount -= amount;
+        }
+      }
+    }
+    
+    // Create tokens list including ETH
+    const tokens: Token[] = [];
+    
+    // Add ETH as the first token
+    tokens.push({
+      symbol: "ETH",
+      name: "Ethereum",
+      decimals: 18,
+      contractAddress: "native",
+      amount: ethBalance,
+      price: 0, // Will be filled from CoinGecko
+      value: 0, // Will be calculated
+      change24h: 0, // Will be filled
+      logoUrl: "https://cryptologos.cc/logos/ethereum-eth-logo.svg",
+    });
+    
+    // Add ERC20 tokens with positive balances
+    for (const tokenData of tokenMap.values()) {
+      if (tokenData.amount > 0) {
+        tokens.push(tokenData);
+      }
+    }
     
     // Get transaction history
-    const transactionsUrl = `${COVALENT_BASE_URL}/1/address/${address}/transactions_v2/?key=${COVALENT_API_KEY}`;
+    const transactionsUrl = `${ETHERSCAN_BASE_URL}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
     const transactionsResponse = await axios.get(transactionsUrl);
-    const transactions = transactionsResponse.data.data.items;
-    
-    // Create token list with balances
-    const tokens: Token[] = await Promise.all(
-      balances
-        .filter((item: any) => parseFloat(item.balance) > 0)
-        .map(async (item: any) => {
-          // Get token price and data
-          return {
-            symbol: item.contract_ticker_symbol,
-            name: item.contract_name,
-            decimals: item.contract_decimals,
-            contractAddress: item.contract_address,
-            amount: parseFloat(item.balance) / (10 ** item.contract_decimals),
-            price: parseFloat(item.quote_rate) || 0,
-            value: parseFloat(item.quote) || 0,
-            change24h: parseFloat(item.quote_rate_24h) || 0,
-            logoUrl: item.logo_url,
-          };
-        })
-    );
+    const transactions = transactionsResponse.data.result || [];
     
     // Calculate total portfolio value
     const totalValue = tokens.reduce((sum, token) => sum + token.value, 0);
@@ -50,30 +102,33 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
       .map((tx: any) => {
         let type: Transaction["type"] = "other";
         
-        if (tx.from_address.toLowerCase() === address.toLowerCase()) {
+        if (tx.from.toLowerCase() === address.toLowerCase()) {
           type = "send";
-        } else if (tx.to_address.toLowerCase() === address.toLowerCase()) {
+        } else if (tx.to.toLowerCase() === address.toLowerCase()) {
           type = "receive";
         }
         
-        // Check if it's a swap by examining log events (simplified)
-        if (tx.log_events?.some((event: any) => 
-            event.decoded?.name === "Swap" || 
-            event.sender_name?.includes("Uniswap") || 
-            event.sender_name?.includes("Sushi"))) {
-          type = "swap";
+        // Simple heuristic for detecting swap transactions (not 100% accurate)
+        // Check if input data exists and transaction is to a known DEX
+        if (tx.input && tx.input.startsWith('0x')) {
+          if (tx.input.includes('swap') || tx.input.includes('trade') || 
+              tx.to.toLowerCase() === '0x7a250d5630b4cf539739df2c5dacb4c659f2488d') { // Uniswap V2 Router
+            type = "swap";
+          }
         }
         
+        const value = parseInt(tx.value) / 1e18; // Convert Wei to ETH
+        
         return {
-          hash: tx.tx_hash,
-          timestamp: new Date(tx.block_signed_at).getTime(),
+          hash: tx.hash,
+          timestamp: parseInt(tx.timeStamp) * 1000, // Convert to milliseconds
           type,
-          fromAddress: tx.from_address,
-          toAddress: tx.to_address,
-          tokenSymbol: "", // Would need more processing to determine actual token
-          amount: 0, // Would need more processing
-          value: parseFloat(tx.value_quote) || 0,
-          platformName: tx.log_events?.[0]?.sender_name || undefined,
+          fromAddress: tx.from,
+          toAddress: tx.to,
+          tokenSymbol: "ETH", // Default to ETH for normal transactions
+          amount: value,
+          value: value, // ETH value 
+          platformName: undefined,
         };
       });
     
