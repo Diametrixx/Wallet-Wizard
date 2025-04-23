@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Clipboard, Bitcoin, Coins, Wallet, AlertCircle } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { detectChain } from "@/lib/wallet-utils";
+import WalletConnect from "./WalletConnect";
+import { Separator } from "@/components/ui/separator";
 
 type WalletInputProps = {
   onAnalyze: (address: string, chain: string) => void;
@@ -46,6 +48,11 @@ export default function WalletInput({ onAnalyze, error }: WalletInputProps) {
     if (walletAddress && selectedChain) {
       onAnalyze(walletAddress, selectedChain);
     }
+  };
+  
+  const handleWalletConnected = (address: string) => {
+    setWalletAddress(address);
+    setSelectedChain("solana");
   };
 
   return (
@@ -117,6 +124,15 @@ export default function WalletInput({ onAnalyze, error }: WalletInputProps) {
         >
           ANALYZE WALLET
         </Button>
+        
+        <div className="mt-6 mb-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Separator className="flex-1 bg-gray-700" />
+            <span className="text-sm text-gray-400">OR</span>
+            <Separator className="flex-1 bg-gray-700" />
+          </div>
+          <WalletConnect onWalletConnected={handleWalletConnected} />
+        </div>
         
         <div className="mt-6 grid grid-cols-3 gap-4">
           <div className="cyber-card p-3 text-center">
