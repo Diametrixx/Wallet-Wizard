@@ -21,18 +21,40 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
   try {
     // Get token balances
     const balancesUrl = `${HELIUS_BASE_URL}/addresses/${address}/balances?api-key=${HELIUS_API_KEY}`;
+    console.log(`Fetching token balances for ${address}`);
     const balancesResponse = await axios.get(balancesUrl);
     const balances = balancesResponse.data.tokens;
+    console.log(`Found ${balances.length} tokens in wallet`);
     
     // Get transaction history
     const transactionsUrl = `${HELIUS_BASE_URL}/addresses/${address}/transactions?api-key=${HELIUS_API_KEY}`;
+    console.log(`Fetching transaction history for ${address}`);
     const transactionsResponse = await axios.get(transactionsUrl);
     const transactions = transactionsResponse.data;
+    console.log(`Found ${transactions.length} transactions`);
     
     // Get SOL native balance
-    const solBalanceUrl = `${HELIUS_BASE_URL}/addresses/${address}/balances?api-key=${HELIUS_API_KEY}`;
-    const solBalanceResponse = await axios.get(solBalanceUrl);
-    const solBalance = solBalanceResponse.data.nativeBalance;
+    const solBalance = balancesResponse.data.nativeBalance;
+    console.log(`SOL balance: ${solBalance / 1e9} SOL`);
+    
+    // Get token information from Jupiter API for better token recognition
+    console.log("Fetching token metadata from Jupiter API");
+    const jupiterTokensUrl = "https://token.jup.ag/all";
+    let tokenMetadata: Record<string, any> = {};
+    
+    try {
+      const jupiterResponse = await axios.get(jupiterTokensUrl);
+      const jupiterTokens = jupiterResponse.data;
+      
+      // Create a map of token addresses to metadata
+      jupiterTokens.forEach((token: any) => {
+        tokenMetadata[token.address] = token;
+      });
+      
+      console.log(`Loaded metadata for ${Object.keys(tokenMetadata).length} tokens`);
+    } catch (error) {
+      console.error("Error fetching Jupiter token list:", error);
+    }
     
     // Create token list with balances (including SOL)
     const tokens: Token[] = [];
@@ -53,17 +75,27 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
     // Add other tokens
     for (const token of balances) {
       if (token.amount > 0) {
-        tokens.push({
-          symbol: token.symbol || "Unknown",
-          name: token.name || "Unknown Token",
-          decimals: token.decimals || 0,
+        // Look up token in Jupiter metadata
+        const metadata = tokenMetadata[token.mint];
+        
+        const tokenData: Token = {
+          symbol: token.symbol || (metadata?.symbol || "Unknown"),
+          name: token.name || (metadata?.name || "Unknown Token"),
+          decimals: token.decimals || (metadata?.decimals || 0),
           contractAddress: token.mint,
-          amount: token.amount / Math.pow(10, token.decimals || 0),
+          amount: token.amount / Math.pow(10, token.decimals || metadata?.decimals || 0),
           price: 0, // Will be filled
           value: 0, // Will be calculated
           change24h: 0, // Will be filled
-          logoUrl: "", // No logo in API
-        });
+          logoUrl: metadata?.logoURI || "", // Use Jupiter logo if available
+        };
+        
+        // If metadata has coingeckoId, store it for price lookup
+        if (metadata?.extensions?.coingeckoId) {
+          (tokenData as any).coingeckoId = metadata.extensions.coingeckoId;
+        }
+        
+        tokens.push(tokenData);
       }
     }
     
@@ -121,8 +153,16 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
       // Final list of tokens to fetch prices for: SOL + sorted tokens
       const prioritizedSymbols = ['sol', ...filteredAndSorted];
       
+      // Create a map of coingeckoIds for tokens that have them
+      const coingeckoIdMap: Record<string, string> = {};
+      tokens.forEach(token => {
+        if ((token as any).coingeckoId) {
+          coingeckoIdMap[token.symbol.toLowerCase()] = (token as any).coingeckoId;
+        }
+      });
+      
       // Get cached or fetch new prices
-      const priceData = await storage.getCachedOrFetchPrices(prioritizedSymbols);
+      const priceData = await storage.getCachedOrFetchPrices(prioritizedSymbols, coingeckoIdMap);
       
       // Update token prices and calculate values
       tokens.forEach(token => {

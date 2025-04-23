@@ -61,10 +61,15 @@ function mapSymbolToId(symbol: string): string {
 /**
  * Gets current price data for a list of tokens
  * @param symbols Array of token symbols
+ * @param coingeckoIdMap Optional map of symbols to CoinGecko IDs for more accurate lookup
  * @param days Number of days for historical data (default: 1)
  * @returns Price data for each token
  */
-export async function getPriceData(symbols: string[], days = 1): Promise<PriceData> {
+export async function getPriceData(
+  symbols: string[], 
+  coingeckoIdMap: Record<string, string> = {}, 
+  days = 1
+): Promise<PriceData> {
   try {
     // Filter out unknown tokens and limit to known tokens only
     const filteredSymbols = symbols.filter(symbol => 
@@ -84,8 +89,15 @@ export async function getPriceData(symbols: string[], days = 1): Promise<PriceDa
     // Limit to 10 tokens maximum to avoid API limits
     const limitedSymbols = filteredSymbols.slice(0, 10);
     
-    // Map symbols to CoinGecko IDs
-    const mappedIds = limitedSymbols.map(mapSymbolToId);
+    // Map symbols to CoinGecko IDs, using the provided map if available
+    const mappedIds = limitedSymbols.map(symbol => {
+      // If we have a direct coingeckoId from Jupiter, use that first
+      if (coingeckoIdMap[symbol.toLowerCase()]) {
+        return coingeckoIdMap[symbol.toLowerCase()];
+      }
+      // Otherwise fall back to our standard mapping
+      return mapSymbolToId(symbol);
+    });
     const ids = mappedIds.join(",");
     
     console.log(`Fetching price data for tokens: ${limitedSymbols.join(', ')}`);

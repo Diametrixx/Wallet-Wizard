@@ -22,7 +22,7 @@ export interface IStorage {
   // Token price methods
   getTokenPrice(symbol: string): Promise<any | undefined>;
   saveTokenPrice(symbol: string, priceData: any): Promise<void>;
-  getCachedOrFetchPrices(symbols: string[]): Promise<Record<string, any>>;
+  getCachedOrFetchPrices(symbols: string[], coingeckoIdMap?: Record<string, string>): Promise<Record<string, any>>;
   getWhitelistedTokens(): Promise<string[]>;
 }
 
@@ -167,7 +167,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
   
-  async getCachedOrFetchPrices(symbols: string[]): Promise<Record<string, any>> {
+  async getCachedOrFetchPrices(symbols: string[], coingeckoIdMap: Record<string, string> = {}): Promise<Record<string, any>> {
     const result: Record<string, any> = {};
     const symbolsToFetch: string[] = [];
     
@@ -185,8 +185,8 @@ export class DatabaseStorage implements IStorage {
     // If we need to fetch any prices, do it now
     if (symbolsToFetch.length > 0) {
       try {
-        // Get the prices from CoinGecko
-        const priceData = await getPriceData(symbolsToFetch);
+        // Get the prices from CoinGecko using coingeckoIdMap if provided
+        const priceData = await getPriceData(symbolsToFetch, coingeckoIdMap);
         
         // Save the prices to the cache and add them to the result
         for (const symbol of symbolsToFetch) {
@@ -275,7 +275,7 @@ export class MemStorage implements IStorage {
     this.tokenPrices.set(symbol.toLowerCase(), priceData);
   }
   
-  async getCachedOrFetchPrices(symbols: string[]): Promise<Record<string, any>> {
+  async getCachedOrFetchPrices(symbols: string[], coingeckoIdMap: Record<string, string> = {}): Promise<Record<string, any>> {
     const result: Record<string, any> = {};
     const symbolsToFetch: string[] = [];
     
@@ -293,7 +293,7 @@ export class MemStorage implements IStorage {
     // Fetch missing prices
     if (symbolsToFetch.length > 0) {
       try {
-        const priceData = await getPriceData(symbolsToFetch);
+        const priceData = await getPriceData(symbolsToFetch, coingeckoIdMap);
         
         for (const symbol of symbolsToFetch) {
           const lowercase = symbol.toLowerCase();
