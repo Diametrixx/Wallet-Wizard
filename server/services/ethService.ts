@@ -1,9 +1,16 @@
 import { z } from 'zod';
-import { apiRequest } from '../helpers';
 
 // Etherscan API base URL and key
 const ETHERSCAN_API_BASE = 'https://api.etherscan.io/api';
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || '';
+
+// Log if API key is available
+console.log(`Ethereum service initialized with Etherscan API key: ${ETHERSCAN_API_KEY ? "Available" : "Missing"}`);
+
+// Check if the environment variable is defined
+if (!ETHERSCAN_API_KEY) {
+  console.warn("WARNING: ETHERSCAN_API_KEY is not set. Ethereum wallet data will not be available.");
+}
 
 // Validate token transaction response
 const tokenTxSchema = z.object({

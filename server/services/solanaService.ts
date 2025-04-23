@@ -4,6 +4,14 @@ import { z } from 'zod';
 const HELIUS_API_BASE = 'https://api.helius.xyz/v0';
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '';
 
+// Log if API key is available
+console.log(`Solana service initialized with Helius API key: ${HELIUS_API_KEY ? "Available" : "Missing"}`);
+
+// Check if the environment variable is defined
+if (!HELIUS_API_KEY) {
+  console.warn("WARNING: HELIUS_API_KEY is not set. Solana wallet data will not be available.");
+}
+
 // Validate token balance response
 const tokenBalanceSchema = z.object({
   mint: z.string(),

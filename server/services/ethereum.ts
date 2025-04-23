@@ -6,6 +6,14 @@ import { getPriceData } from "./prices";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 const ETHERSCAN_BASE_URL = "https://api.etherscan.io/api";
 
+// Log if API key is available
+console.log(`Ethereum service initialized with Etherscan API key: ${ETHERSCAN_API_KEY ? "Available" : "Missing"}`);
+
+// Check if the environment variable is defined
+if (!ETHERSCAN_API_KEY) {
+  console.warn("WARNING: ETHERSCAN_API_KEY is not set. Ethereum wallet data will not be available.");
+}
+
 /**
  * Analyzes an Ethereum wallet to generate portfolio data
  */
