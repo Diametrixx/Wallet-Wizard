@@ -66,11 +66,29 @@ function mapSymbolToId(symbol: string): string {
  */
 export async function getPriceData(symbols: string[], days = 1): Promise<PriceData> {
   try {
+    // Filter out unknown tokens and limit to known tokens only
+    const filteredSymbols = symbols.filter(symbol => 
+      symbol.toLowerCase() !== "unknown" && 
+      TOKEN_ID_MAP[symbol.toLowerCase()] !== undefined
+    );
+    
+    // If no valid symbols, return empty result
+    if (filteredSymbols.length === 0) {
+      console.log("No recognized token symbols to fetch prices for");
+      return symbols.reduce((acc, symbol) => {
+        acc[symbol.toLowerCase()] = { usd: 0 };
+        return acc;
+      }, {} as PriceData);
+    }
+    
+    // Limit to 10 tokens maximum to avoid API limits
+    const limitedSymbols = filteredSymbols.slice(0, 10);
+    
     // Map symbols to CoinGecko IDs
-    const mappedIds = symbols.map(mapSymbolToId);
+    const mappedIds = limitedSymbols.map(mapSymbolToId);
     const ids = mappedIds.join(",");
     
-    console.log(`Fetching price data for tokens: ${symbols.join(', ')}`);
+    console.log(`Fetching price data for tokens: ${limitedSymbols.join(', ')}`);
     
     // Call CoinGecko API with API key
     const url = `${COINGECKO_API_URL}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&x_cg_pro_api_key=${COINGECKO_API_KEY}`;
@@ -80,13 +98,18 @@ export async function getPriceData(symbols: string[], days = 1): Promise<PriceDa
     
     // Map the response back to the original symbols
     const result: PriceData = {};
-    symbols.forEach((symbol, index) => {
+    
+    // First, initialize all symbols with default values
+    symbols.forEach(symbol => {
+      result[symbol.toLowerCase()] = { usd: 0 };
+    });
+    
+    // Then update the ones that we have data for
+    limitedSymbols.forEach((symbol, index) => {
       const id = mappedIds[index];
       if (response.data[id]) {
         result[symbol.toLowerCase()] = response.data[id];
-      } else {
-        // If no price data, provide default values
-        result[symbol.toLowerCase()] = { usd: 0 };
+        console.log(`Price data for ${symbol}: $${response.data[id].usd}`);
       }
     });
     
