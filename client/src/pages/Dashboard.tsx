@@ -31,17 +31,25 @@ export default function Dashboard() {
 
   // Fetch portfolio data
   const { data: portfolio, isLoading, error } = useQuery<Portfolio>({
-    queryKey: [`/api/analyze`],
+    queryKey: [`/api/analyze`, address, chain],
     enabled: !!address && !!chain,
     queryFn: async () => {
       if (!address || !chain) return null;
       
-      const res = await apiRequest("POST", "/api/analyze", { 
-        address, 
-        chain 
-      });
-      
-      return await res.json();
+      try {
+        console.log(`Analyzing wallet: ${address} on chain: ${chain}`);
+        const res = await apiRequest("POST", "/api/analyze", { 
+          address, 
+          chain 
+        });
+        
+        const data = await res.json();
+        console.log("Analysis completed:", data);
+        return data;
+      } catch (err) {
+        console.error("Error analyzing wallet:", err);
+        throw err;
+      }
     }
   });
 

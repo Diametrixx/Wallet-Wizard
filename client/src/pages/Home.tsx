@@ -50,15 +50,25 @@ export default function Home() {
       // Validate wallet data
       const walletData = walletSchema.parse({ address, chain });
       
-      // Call the API to analyze the wallet
-      await apiRequest("POST", "/api/analyze", walletData);
+      console.log(`Validating wallet: ${address} on chain: ${chain}`);
       
-      // Redirect to the dashboard page
+      // Call the API to detect the chain first (validation step)
+      const detectChainResponse = await apiRequest("POST", "/api/detect-chain", { address });
+      const detectChainData = await detectChainResponse.json();
+      
+      console.log("Chain detection result:", detectChainData);
+      
+      if (detectChainData.chain === "unknown") {
+        throw new Error("Invalid wallet address format");
+      }
+      
+      // Redirect to the dashboard page to fetch the full analysis
       setTimeout(() => {
         setIsLoading(false);
         setLocation(`/dashboard/${address}`);
-      }, 1000);
+      }, 3000); // Give the user time to see the loading animation
     } catch (error) {
+      console.error("Error analyzing wallet:", error);
       setError(error instanceof Error ? error.message : "Failed to analyze wallet");
       setIsLoading(false);
     }
