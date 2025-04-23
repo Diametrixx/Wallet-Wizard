@@ -1,17 +1,14 @@
-import axios from "axios";
-import type { Portfolio, Token, Transaction } from "@shared/schema";
-import { getPriceData } from "./prices";
+import axios from 'axios';
+import { Transaction, Portfolio, Token } from '@shared/schema';
+import { getPriceData } from './prices';
 
-// Use Etherscan API 
-const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
-const ETHERSCAN_BASE_URL = "https://api.etherscan.io/api";
+// Configure Etherscan API constants
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || '';
+const ETHERSCAN_BASE_URL = 'https://api.etherscan.io/api';
 
-// Log if API key is available
-console.log(`Ethereum service initialized with Etherscan API key: ${ETHERSCAN_API_KEY ? "Available" : "Missing"}`);
-
-// Check if the environment variable is defined
-if (!ETHERSCAN_API_KEY) {
-  console.warn("WARNING: ETHERSCAN_API_KEY is not set. Ethereum wallet data will not be available.");
+// Helper function to format an address for display
+function formatAddress(address: string): string {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 /**
@@ -19,78 +16,97 @@ if (!ETHERSCAN_API_KEY) {
  */
 export async function analyzeEthereumWallet(address: string): Promise<Portfolio> {
   try {
+    console.log(`Analyzing Ethereum wallet: ${address}`);
+    
     // Get ETH balance
-    const ethBalanceUrl = `${ETHERSCAN_BASE_URL}?module=account&action=balance&address=${address}&tag=latest&apikey=${ETHERSCAN_API_KEY}`;
-    const ethBalanceResponse = await axios.get(ethBalanceUrl);
-    const ethBalanceWei = ethBalanceResponse.data.result;
-    const ethBalance = parseInt(ethBalanceWei) / 1e18; // Convert wei to ETH
+    const balanceUrl = `${ETHERSCAN_BASE_URL}?module=account&action=balance&address=${address}&tag=latest&apikey=${ETHERSCAN_API_KEY}`;
+    console.log(`Fetching ETH balance for address: ${address}`);
+    
+    const balanceResponse = await axios.get(balanceUrl);
+    // Check response format
+    console.log(`Balance response status: ${balanceResponse.data.status}, message: ${balanceResponse.data.message}`);
+    
+    // Convert Wei to ETH
+    const balanceWei = balanceResponse.data.result || '0';
+    const balanceEth = parseFloat(balanceWei) / 1e18;
+    console.log(`ETH balance: ${balanceEth}`);
+    
+    // Create tokens array starting with ETH
+    const tokens: Token[] = [{
+      symbol: 'ETH',
+      name: 'Ethereum',
+      amount: balanceEth,
+      price: 0, // Will be updated with real price later
+      value: 0, // Will be calculated
+      percentChange: 0, // Will be updated with real price change later
+      logoUrl: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg',
+    }];
     
     // Get ERC20 token balances
-    const tokenBalancesUrl = `${ETHERSCAN_BASE_URL}?module=account&action=tokenbalance&address=${address}&tag=latest&apikey=${ETHERSCAN_API_KEY}`;
-    const erc20BalancesUrl = `${ETHERSCAN_BASE_URL}?module=account&action=tokentx&address=${address}&startblock=0&endblock=999999999&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
-    const erc20Response = await axios.get(erc20BalancesUrl);
+    const tokensUrl = `${ETHERSCAN_BASE_URL}?module=account&action=tokentx&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
+    console.log(`Fetching token transfers for address: ${address}`);
     
-    // Process ERC20 transactions to determine token balances (Etherscan doesn't have a direct balances endpoint)
-    const tokenMap = new Map<string, any>();
+    const tokensResponse = await axios.get(tokensUrl);
+    // Check response format for tokens
+    console.log(`Token transfers response status: ${tokensResponse.data.status}, message: ${tokensResponse.data.message}`);
     
-    // Process ERC-20 token transactions to calculate balances
-    if (erc20Response.data.status === "1" && erc20Response.data.result) {
-      const erc20Txs = erc20Response.data.result;
-      
-      // Calculate token balances from transaction history
-      for (const tx of erc20Txs) {
-        const tokenAddress = tx.contractAddress.toLowerCase();
-        const tokenSymbol = tx.tokenSymbol;
-        const tokenName = tx.tokenName;
-        const tokenDecimals = parseInt(tx.tokenDecimal);
-        
-        // Handle token transfers
-        if (!tokenMap.has(tokenAddress)) {
-          tokenMap.set(tokenAddress, {
-            symbol: tokenSymbol,
-            name: tokenName,
-            decimals: tokenDecimals,
-            contractAddress: tokenAddress,
-            amount: 0,
-            price: 0, 
-            value: 0,
-            change24h: 0,
-            logoUrl: `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${tokenAddress}/logo.png`,
-          });
-        }
-        
-        const tokenBalance = tokenMap.get(tokenAddress);
-        const amount = parseInt(tx.value) / Math.pow(10, tokenDecimals);
-        
-        // If the address is the receiver, add the amount
-        if (tx.to.toLowerCase() === address.toLowerCase()) {
-          tokenBalance.amount += amount;
-        }
-        // If the address is the sender, subtract the amount
-        else if (tx.from.toLowerCase() === address.toLowerCase()) {
-          tokenBalance.amount -= amount;
-        }
-      }
+    // Ensure token transfers is an array
+    let tokenTransfers = [];
+    if (tokensResponse.data.status === "1" && Array.isArray(tokensResponse.data.result)) {
+      tokenTransfers = tokensResponse.data.result;
+      console.log(`Found ${tokenTransfers.length} token transfers`);
+    } else {
+      console.warn("No token transfers found or invalid response");
+      tokenTransfers = []; // Ensure it's an empty array if no transactions
     }
     
-    // Create tokens list including ETH
-    const tokens: Token[] = [];
+    // Process token transfers to get unique tokens and the latest balance for each
+    const tokenMap = new Map<string, any>();
     
-    // Add ETH as the first token
-    tokens.push({
-      symbol: "ETH",
-      name: "Ethereum",
-      decimals: 18,
-      contractAddress: "native",
-      amount: ethBalance,
-      price: 0, // Will be filled from CoinGecko
-      value: 0, // Will be calculated
-      change24h: 0, // Will be filled
-      logoUrl: "https://cryptologos.cc/logos/ethereum-eth-logo.svg",
+    tokenTransfers.forEach((transfer: any) => {
+      const tokenAddress = transfer.contractAddress;
+      const symbol = transfer.tokenSymbol;
+      const name = transfer.tokenName;
+      const decimals = parseInt(transfer.tokenDecimal);
+      
+      // Skip if we've already processed this token
+      if (!tokenMap.has(tokenAddress)) {
+        tokenMap.set(tokenAddress, {
+          symbol,
+          name,
+          contractAddress: tokenAddress,
+          decimals,
+          amount: 0,
+          price: 0,
+          value: 0,
+          change24h: 0,
+          logoUrl: `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${tokenAddress}/logo.png`,
+        });
+      }
     });
     
-    // Add ERC20 tokens with positive balances
-    tokenMap.forEach((tokenData) => {
+    // Token balances need to be calculated from token transfers
+    // Since Etherscan doesn't provide a direct token balance API for all tokens
+    // Here we make a simplified calculation - would be more robust with a token balance API
+    console.log(`Processing token balances from ${tokenTransfers.length} transfers`);
+    
+    tokenTransfers.forEach((transfer: any) => {
+      const tokenAddress = transfer.contractAddress;
+      const value = parseFloat(transfer.value) / Math.pow(10, parseInt(transfer.tokenDecimal));
+      
+      const tokenData = tokenMap.get(tokenAddress);
+      
+      if (transfer.to.toLowerCase() === address.toLowerCase()) {
+        // If tokens were received
+        tokenData.amount += value;
+      } else if (transfer.from.toLowerCase() === address.toLowerCase()) {
+        // If tokens were sent
+        tokenData.amount -= value;
+      }
+    });
+    
+    // Filter out tokens with zero balance and add them to our tokens array
+    tokenMap.forEach((tokenData, tokenAddress) => {
       if (tokenData.amount > 0) {
         tokens.push(tokenData);
       }
@@ -168,9 +184,9 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
         let type: Transaction["type"] = "other";
         
         if (tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
-          type = "send";
+          type = "sent";
         } else if (tx.to && tx.to.toLowerCase() === address.toLowerCase()) {
-          type = "receive";
+          type = "received";
         }
         
         // Simple heuristic for detecting swap transactions (not 100% accurate)
@@ -178,7 +194,7 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
         if (tx.input && tx.input.startsWith('0x')) {
           if (tx.input.includes('swap') || tx.input.includes('trade') || 
               (tx.to && tx.to.toLowerCase() === '0x7a250d5630b4cf539739df2c5dacb4c659f2488d')) { // Uniswap V2 Router
-            type = "swap";
+            type = "swapped";
           }
         }
         
