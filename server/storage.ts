@@ -17,6 +17,7 @@ export interface IStorage {
   // Portfolio cache methods
   getPortfolioByWalletAddress(walletAddress: string, chain: string): Promise<Portfolio | undefined>;
   savePortfolio(portfolio: Portfolio): Promise<Portfolio>;
+  clearCacheForWallet(walletAddress: string, chain: string): Promise<void>;
   
   // Token price methods
   getTokenPrice(symbol: string): Promise<any | undefined>;
@@ -76,14 +77,7 @@ export class DatabaseStorage implements IStorage {
     
     try {
       // Delete any existing data for this wallet/chain combination
-      await db
-        .delete(walletCache)
-        .where(
-          and(
-            eq(walletCache.address, normalizedAddress),
-            eq(walletCache.chain, portfolio.wallet.chain)
-          )
-        );
+      await this.clearCacheForWallet(normalizedAddress, portfolio.wallet.chain);
         
       // Insert the new portfolio data
       await db
@@ -110,6 +104,27 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Error saving portfolio:", error);
       return portfolio;
+    }
+  }
+  
+  async clearCacheForWallet(walletAddress: string, chain: string): Promise<void> {
+    // Normalize the wallet address
+    const normalizedAddress = walletAddress.toLowerCase();
+    
+    try {
+      // Delete the cached wallet data
+      await db
+        .delete(walletCache)
+        .where(
+          and(
+            eq(walletCache.address, normalizedAddress),
+            eq(walletCache.chain, chain)
+          )
+        );
+      
+      console.log(`Cleared cache for wallet ${normalizedAddress} (chain: ${chain})`);
+    } catch (error) {
+      console.error(`Error clearing cache for wallet ${normalizedAddress}:`, error);
     }
   }
   
@@ -241,6 +256,14 @@ export class MemStorage implements IStorage {
     const key = `${portfolio.wallet.address.toLowerCase()}-${portfolio.wallet.chain}`;
     this.portfolios.set(key, portfolio);
     return portfolio;
+  }
+  
+  async clearCacheForWallet(walletAddress: string, chain: string): Promise<void> {
+    const key = `${walletAddress.toLowerCase()}-${chain}`;
+    if (this.portfolios.has(key)) {
+      this.portfolios.delete(key);
+      console.log(`Cleared in-memory cache for wallet ${walletAddress} (chain: ${chain})`);
+    }
   }
   
   // Token price methods

@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { walletSchema } from "@shared/schema";
+import { walletSchema, type Portfolio } from "@shared/schema";
 import { z } from "zod";
 import { analyzeEthereumWallet } from "./services/ethereum";
 import { analyzeSolanaWallet } from "./services/solana";
@@ -119,6 +119,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       res.status(500).json({ message: (error as Error).message || "Failed to detect chain" });
+    }
+  });
+  
+  // Clear cache for a wallet (useful for testing)
+  app.post("/api/clear-cache", async (req, res) => {
+    try {
+      const { address, chain } = req.body;
+      
+      if (!address || !chain) {
+        return res.status(400).json({ message: "Address and chain are required" });
+      }
+      
+      // Import storage
+      const { storage } = await import('./storage');
+      
+      // Clear cache for the wallet
+      await storage.clearCacheForWallet(address, chain);
+      
+      return res.json({ 
+        success: true, 
+        message: `Cache cleared for wallet ${address} on ${chain} chain` 
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false,
+        message: (error as Error).message || "Failed to clear cache" 
+      });
     }
   });
 
