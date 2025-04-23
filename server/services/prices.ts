@@ -68,7 +68,7 @@ function mapSymbolToId(symbol: string): string {
 export async function getPriceData(
   symbols: string[], 
   coingeckoIdMap: Record<string, string> = {}, 
-  days = 1
+  days: number = 1
 ): Promise<PriceData> {
   try {
     // Filter out unknown tokens and limit to known tokens only

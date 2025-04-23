@@ -33,10 +33,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         walletData.chain
       );
       
-      // If we have cached data that's less than 30 minutes old, return it
-      if (cachedPortfolio) {
+      // If we have cached data, check if we should use it or force a refresh
+      const forceRefresh = req.query.forceRefresh === 'true';
+      if (cachedPortfolio && !forceRefresh) {
         console.log(`Found cached portfolio data for ${walletData.address}, using it`);
         return res.json(cachedPortfolio);
+      } else if (cachedPortfolio && forceRefresh) {
+        console.log(`Found cached data but force refresh requested for ${walletData.address}`);
       }
       
       console.log(`No cached data found for ${walletData.address}, analyzing wallet`);
@@ -92,7 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Symbol is required" });
       }
       
-      const priceHistory = await getPriceData([symbol], days);
+      const priceHistory = await getPriceData([symbol], undefined, days);
       res.json(priceHistory);
     } catch (error) {
       res.status(500).json({ message: (error as Error).message || "Failed to fetch price history" });
