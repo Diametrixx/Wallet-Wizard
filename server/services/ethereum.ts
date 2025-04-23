@@ -90,21 +90,40 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
     
     // Get transaction history
     const transactionsUrl = `${ETHERSCAN_BASE_URL}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
+    console.log(`Fetching Ethereum transactions for address: ${address}`);
+    
     const transactionsResponse = await axios.get(transactionsUrl);
-    const transactions = transactionsResponse.data.result || [];
+    // Check response format
+    console.log(`Transaction response status: ${transactionsResponse.data.status}, message: ${transactionsResponse.data.message}`);
+    
+    // Ensure transactions is an array
+    let transactions = [];
+    if (transactionsResponse.data.status === "1" && Array.isArray(transactionsResponse.data.result)) {
+      transactions = transactionsResponse.data.result;
+      console.log(`Found ${transactions.length} transactions`);
+    } else {
+      console.warn("No transactions found or invalid response");
+      transactions = []; // Ensure it's an empty array if no transactions
+    }
     
     // Calculate total portfolio value
     const totalValue = tokens.reduce((sum, token) => sum + token.value, 0);
     
     // Process transactions to determine profit/loss
-    const processedTransactions: Transaction[] = transactions
-      .slice(0, 20) // Limit to most recent 20 transactions
-      .map((tx: any) => {
+    const processedTransactions: Transaction[] = [];
+    
+    // Only process if we have valid transactions
+    if (Array.isArray(transactions) && transactions.length > 0) {
+      // Take only the first 20 transactions
+      const recentTransactions = transactions.slice(0, 20);
+      
+      // Process each transaction
+      for (const tx of recentTransactions) {
         let type: Transaction["type"] = "other";
         
-        if (tx.from.toLowerCase() === address.toLowerCase()) {
+        if (tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
           type = "send";
-        } else if (tx.to.toLowerCase() === address.toLowerCase()) {
+        } else if (tx.to && tx.to.toLowerCase() === address.toLowerCase()) {
           type = "receive";
         }
         
@@ -112,25 +131,26 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
         // Check if input data exists and transaction is to a known DEX
         if (tx.input && tx.input.startsWith('0x')) {
           if (tx.input.includes('swap') || tx.input.includes('trade') || 
-              tx.to.toLowerCase() === '0x7a250d5630b4cf539739df2c5dacb4c659f2488d') { // Uniswap V2 Router
+              (tx.to && tx.to.toLowerCase() === '0x7a250d5630b4cf539739df2c5dacb4c659f2488d')) { // Uniswap V2 Router
             type = "swap";
           }
         }
         
-        const value = parseInt(tx.value) / 1e18; // Convert Wei to ETH
+        const value = tx.value ? parseInt(tx.value) / 1e18 : 0; // Convert Wei to ETH
         
-        return {
-          hash: tx.hash,
-          timestamp: parseInt(tx.timeStamp) * 1000, // Convert to milliseconds
+        processedTransactions.push({
+          hash: tx.hash || "",
+          timestamp: tx.timeStamp ? parseInt(tx.timeStamp) * 1000 : Date.now(), // Convert to milliseconds
           type,
-          fromAddress: tx.from,
-          toAddress: tx.to,
+          fromAddress: tx.from || "",
+          toAddress: tx.to || "",
           tokenSymbol: "ETH", // Default to ETH for normal transactions
           amount: value,
           value: value, // ETH value 
           platformName: undefined,
-        };
-      });
+        });
+      }
+    }
     
     // Sort tokens by value to get winners and losers
     const sortedTokens = [...tokens].sort((a, b) => b.value - a.value);

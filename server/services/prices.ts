@@ -1,6 +1,16 @@
 import axios from "axios";
 
-const COINGECKO_API_URL = "https://api.coingecko.com/api/v3";
+// Use CoinGecko Pro API with key
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || "";
+const COINGECKO_API_URL = "https://pro-api.coingecko.com/api/v3";
+
+// Log if API key is available
+console.log(`Price service initialized with CoinGecko API key: ${COINGECKO_API_KEY ? "Available" : "Missing"}`);
+
+// Check if the environment variable is defined
+if (!COINGECKO_API_KEY) {
+  console.warn("WARNING: COINGECKO_API_KEY is not set. Price data will not be available.");
+}
 
 // Common token symbol to CoinGecko ID mapping
 const TOKEN_ID_MAP: Record<string, string> = {
@@ -62,9 +72,9 @@ export async function getPriceData(symbols: string[], days = 1): Promise<PriceDa
     
     console.log(`Fetching price data for tokens: ${symbols.join(', ')}`);
     
-    // Call CoinGecko API
-    const url = `${COINGECKO_API_URL}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`;
-    console.log(`CoinGecko API URL: ${url}`);
+    // Call CoinGecko API with API key
+    const url = `${COINGECKO_API_URL}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&x_cg_pro_api_key=${COINGECKO_API_KEY}`;
+    console.log(`CoinGecko API URL: ${url.split('&x_cg_pro_api_key=')[0]}...`); // Log URL without API key
     
     const response = await axios.get(url);
     
@@ -105,9 +115,9 @@ export async function getPriceHistory(symbol: string, days = 30) {
     
     console.log(`Fetching price history for token: ${symbol} (CoinGecko ID: ${coinId})`);
     
-    // Call CoinGecko API for market chart
-    const url = `${COINGECKO_API_URL}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`;
-    console.log(`CoinGecko API URL: ${url}`);
+    // Call CoinGecko API for market chart with API key
+    const url = `${COINGECKO_API_URL}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&x_cg_pro_api_key=${COINGECKO_API_KEY}`;
+    console.log(`CoinGecko API URL: ${url.split('&x_cg_pro_api_key=')[0]}...`); // Log URL without API key
     
     const response = await axios.get(url);
     
