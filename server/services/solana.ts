@@ -68,17 +68,28 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
     }
     
     // Get token prices from CoinGecko
-    const symbols = tokens.map(t => t.symbol.toLowerCase());
-    const priceData = await getPriceData(symbols);
-    
-    // Update token prices and calculate values
-    for (const token of tokens) {
-      const priceInfo = priceData[token.symbol.toLowerCase()];
-      if (priceInfo) {
-        token.price = priceInfo.usd || 0;
-        token.change24h = priceInfo.usd_24h_change || 0;
-        token.value = token.amount * token.price;
+    try {
+      const symbols = tokens.map(t => t.symbol.toLowerCase());
+      console.log(`Fetching prices for Solana tokens: ${symbols.join(', ')}`);
+      
+      const priceData = await getPriceData(symbols);
+      
+      // Update token prices and calculate values
+      for (const token of tokens) {
+        const symbol = token.symbol.toLowerCase();
+        const priceInfo = priceData[symbol];
+        
+        if (priceInfo) {
+          token.price = priceInfo.usd || 0;
+          token.change24h = priceInfo.usd_24h_change || 0;
+          token.value = token.amount * token.price;
+          console.log(`Updated price for ${token.symbol}: $${token.price}`);
+        } else {
+          console.log(`No price data found for ${token.symbol}`);
+        }
       }
+    } catch (error) {
+      console.error('Error fetching Solana token prices:', error);
     }
     
     // Calculate total portfolio value

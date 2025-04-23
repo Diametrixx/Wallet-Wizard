@@ -96,6 +96,33 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
       }
     });
     
+    // Fetch token prices from CoinGecko
+    try {
+      // Get list of token symbols
+      const tokenSymbols = tokens.map(token => token.symbol.toLowerCase());
+      console.log(`Fetching prices for tokens: ${tokenSymbols.join(', ')}`);
+      
+      // Get price data
+      const priceData = await getPriceData(tokenSymbols);
+      
+      // Update token prices and calculate values
+      tokens.forEach(token => {
+        const symbol = token.symbol.toLowerCase();
+        const priceInfo = priceData[symbol];
+        
+        if (priceInfo) {
+          token.price = priceInfo.usd || 0;
+          token.change24h = priceInfo.usd_24h_change || 0;
+          token.value = token.price * token.amount;
+          console.log(`Updated price for ${token.symbol}: $${token.price}`);
+        } else {
+          console.log(`No price data found for ${token.symbol}`);
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching token prices:', error);
+    }
+    
     // Get transaction history
     const transactionsUrl = `${ETHERSCAN_BASE_URL}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
     console.log(`Fetching Ethereum transactions for address: ${address}`);

@@ -51,8 +51,8 @@ export default function PortfolioSummary({ portfolio }: PortfolioSummaryProps) {
             </div>
             <div>
               <div className="text-gray-400 text-xs">Performance</div>
-              <div className={`text-lg font-bold ${portfolio.performancePercentage >= 0 ? 'text-cyber-green' : 'text-cyber-pink'}`}>
-                {portfolio.performancePercentage >= 0 ? '+' : ''}{portfolio.performancePercentage.toFixed(1)}%
+              <div className={`text-lg font-bold ${portfolio.performancePercentage && portfolio.performancePercentage >= 0 ? 'text-cyber-green' : 'text-cyber-pink'}`}>
+                {portfolio.performancePercentage ? (portfolio.performancePercentage >= 0 ? '+' : '') + portfolio.performancePercentage.toFixed(1) + '%' : 'N/A'}
               </div>
             </div>
           </div>
