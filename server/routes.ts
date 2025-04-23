@@ -20,26 +20,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API endpoint to analyze a wallet
   app.post("/api/analyze", async (req, res) => {
     try {
-      // Validate the request body
-      const walletData = walletSchema.parse(req.body);
+      // Validate the request body with possible forceRefresh parameter
+      const { address, chain, forceRefresh } = req.body;
+      const walletData = walletSchema.parse({ address, chain });
       
       // Import storage to check cache
       const { storage } = await import('./storage');
       
-      // Check for cached data first
-      console.log(`Checking cache for wallet ${walletData.address} on ${walletData.chain} chain`);
-      const cachedPortfolio = await storage.getPortfolioByWalletAddress(
-        walletData.address, 
-        walletData.chain
-      );
-      
-      // If we have cached data, check if we should use it or force a refresh
-      const forceRefresh = req.query.forceRefresh === 'true';
-      if (cachedPortfolio && !forceRefresh) {
-        console.log(`Found cached portfolio data for ${walletData.address}, using it`);
-        return res.json(cachedPortfolio);
-      } else if (cachedPortfolio && forceRefresh) {
-        console.log(`Found cached data but force refresh requested for ${walletData.address}`);
+      // If forceRefresh is true, clear the cache for this wallet
+      if (forceRefresh) {
+        console.log(`Force refresh requested for ${walletData.address}, clearing cache`);
+        await storage.clearCacheForWallet(walletData.address, walletData.chain);
+      } else {
+        // Check for cached data first
+        console.log(`Checking cache for wallet ${walletData.address} on ${walletData.chain} chain`);
+        const cachedPortfolio = await storage.getPortfolioByWalletAddress(
+          walletData.address, 
+          walletData.chain
+        );
+        
+        // If we have cached data and not forcing refresh, use it
+        if (cachedPortfolio) {
+          console.log(`Found cached portfolio data for ${walletData.address}, using it`);
+          return res.json(cachedPortfolio);
+        }
       }
       
       console.log(`No cached data found for ${walletData.address}, analyzing wallet`);

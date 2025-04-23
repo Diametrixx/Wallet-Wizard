@@ -37,10 +37,11 @@ export default function Dashboard() {
       if (!address || !chain) return null;
       
       try {
-        console.log(`Analyzing wallet: ${address} on chain: ${chain}`);
+        console.log(`Analyzing wallet: ${address} on chain: ${chain} with forced refresh`);
         const res = await apiRequest("POST", "/api/analyze", { 
           address, 
-          chain 
+          chain,
+          forceRefresh: true // Always force refresh to get the latest data
         });
         
         const data = await res.json();
