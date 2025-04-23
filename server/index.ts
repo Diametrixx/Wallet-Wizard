@@ -2,6 +2,13 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// Set API Keys
+process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "DPV4RVYVJQ1DGYKGC8CX7M1CCFIJJ66151";
+process.env.HELIUS_API_KEY = process.env.HELIUS_API_KEY || "423f960d-5447-4a1e-888f-258e3b51a490";
+
+// Log API keys for debugging (remove in production)
+log(`API Keys configured: Etherscan and Helius keys ${process.env.ETHERSCAN_API_KEY ? 'set' : 'missing'} and ${process.env.HELIUS_API_KEY ? 'set' : 'missing'}`);
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

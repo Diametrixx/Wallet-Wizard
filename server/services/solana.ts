@@ -6,6 +6,14 @@ import { getPriceData } from "./prices";
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
 const HELIUS_BASE_URL = `https://api.helius.xyz/v0`;
 
+// Log if API key is available
+console.log(`Solana service initialized with Helius API key: ${HELIUS_API_KEY ? "Available" : "Missing"}`);
+
+// Check if the environment variable is defined
+if (!HELIUS_API_KEY) {
+  console.warn("WARNING: HELIUS_API_KEY is not set. Solana wallet analysis will fail.");
+}
+
 /**
  * Analyzes a Solana wallet to generate portfolio data
  */
@@ -110,11 +118,18 @@ export async function analyzeSolanaWallet(address: string): Promise<Portfolio> {
     
     // Sort tokens by value to get winners and losers
     const sortedTokens = [...tokens].sort((a, b) => b.value - a.value);
-    const topWinners = sortedTokens.filter(t => t.change24h > 0).slice(0, 3);
-    const topLosers = sortedTokens.filter(t => t.change24h < 0).sort((a, b) => a.change24h - b.change24h).slice(0, 3);
+    const topWinners = sortedTokens.filter(t => (t.change24h || 0) > 0).slice(0, 3);
+    const topLosers = sortedTokens.filter(t => (t.change24h || 0) < 0)
+      .sort((a, b) => (a.change24h || 0) - (b.change24h || 0)).slice(0, 3);
     
     // Prepare allocation data
-    let allocationData = [];
+    type AllocationItem = {
+      name: string;
+      value: number;
+      percentage: number;
+      color: string;
+    };
+    let allocationData: AllocationItem[] = [];
     
     // Handle top 4 tokens separately, combine the rest as "Other"
     if (sortedTokens.length > 0) {

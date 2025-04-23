@@ -82,11 +82,11 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
     });
     
     // Add ERC20 tokens with positive balances
-    for (const tokenData of tokenMap.values()) {
+    tokenMap.forEach((tokenData) => {
       if (tokenData.amount > 0) {
         tokens.push(tokenData);
       }
-    }
+    });
     
     // Get transaction history
     const transactionsUrl = `${ETHERSCAN_BASE_URL}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
@@ -134,11 +134,18 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
     
     // Sort tokens by value to get winners and losers
     const sortedTokens = [...tokens].sort((a, b) => b.value - a.value);
-    const topWinners = sortedTokens.filter(t => t.change24h > 0).slice(0, 3);
-    const topLosers = sortedTokens.filter(t => t.change24h < 0).sort((a, b) => a.change24h - b.change24h).slice(0, 3);
+    const topWinners = sortedTokens.filter(t => (t.change24h || 0) > 0).slice(0, 3);
+    const topLosers = sortedTokens.filter(t => (t.change24h || 0) < 0)
+      .sort((a, b) => (a.change24h || 0) - (b.change24h || 0)).slice(0, 3);
     
     // Prepare allocation data
-    let allocationData = [];
+    type AllocationItem = {
+      name: string;
+      value: number;
+      percentage: number;
+      color: string;
+    };
+    let allocationData: AllocationItem[] = [];
     
     // Handle top 4 tokens separately, combine the rest as "Other"
     if (sortedTokens.length > 0) {
