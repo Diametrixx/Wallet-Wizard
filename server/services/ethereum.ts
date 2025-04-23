@@ -112,11 +112,11 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
       }
     });
     
-    // Fetch token prices from CoinGecko
+    // Fetch token prices from storage (cache) or CoinGecko
     try {
       // Get list of token symbols
       const tokenSymbols = tokens.map(token => token.symbol.toLowerCase());
-      console.log(`Fetching prices for tokens: ${tokenSymbols.join(', ')}`);
+      console.log(`Fetching prices for ${tokenSymbols.length} tokens: ${tokenSymbols.slice(0, 10).join(', ')}${tokenSymbols.length > 10 ? '...' : ''}`);
       
       // Ensure ETH has a baseline price if it's in the tokens list
       let ethToken = tokens.find(t => t.symbol.toLowerCase() === 'eth');
@@ -128,8 +128,46 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
         console.log(`Set baseline price for ETH: $${ethToken.price}`);
       }
       
-      // Get price data from API
-      const priceData = await getPriceData(tokenSymbols);
+      // Import storage for token price caching
+      const { storage } = await import('../storage');
+      
+      // Get whitelisted tokens (popular tokens first)
+      const whitelistedTokens = await storage.getWhitelistedTokens();
+      
+      // Prioritize tokens: 1) ETH, 2) Whitelisted tokens, 3) Other tokens with significant balance (value > $5)
+      const ethIndex = tokenSymbols.findIndex(s => s.toLowerCase() === 'eth');
+      if (ethIndex !== -1) {
+        // Move ETH to the front
+        tokenSymbols.splice(ethIndex, 1);
+        tokenSymbols.unshift('eth');
+      }
+      
+      // Sort other tokens based on whitelist priority and balance
+      const filteredAndSorted = tokenSymbols
+        .filter(symbol => symbol.toLowerCase() !== 'eth') // ETH already handled
+        .sort((a, b) => {
+          const aIsWhitelisted = whitelistedTokens.includes(a.toUpperCase());
+          const bIsWhitelisted = whitelistedTokens.includes(b.toUpperCase());
+          
+          if (aIsWhitelisted && !bIsWhitelisted) return -1;
+          if (!aIsWhitelisted && bIsWhitelisted) return 1;
+          
+          // If both are whitelisted or both are not, sort by amount
+          const tokenA = tokens.find(t => t.symbol.toLowerCase() === a.toLowerCase());
+          const tokenB = tokens.find(t => t.symbol.toLowerCase() === b.toLowerCase());
+          
+          const aAmount = tokenA?.amount || 0;
+          const bAmount = tokenB?.amount || 0;
+          
+          return bAmount - aAmount; // Sort descending by amount
+        })
+        .slice(0, 15); // Limit to 15 tokens (plus ETH) to avoid rate limits
+      
+      // Final list of tokens to fetch prices for: ETH + sorted tokens
+      const prioritizedSymbols = ['eth', ...filteredAndSorted];
+      
+      // Get cached or fetch new prices
+      const priceData = await storage.getCachedOrFetchPrices(prioritizedSymbols);
       
       // Update token prices and calculate values
       tokens.forEach(token => {
@@ -143,7 +181,19 @@ export async function analyzeEthereumWallet(address: string): Promise<Portfolio>
           console.log(`Updated price for ${token.symbol}: $${token.price}`);
         } else if (token.symbol.toLowerCase() !== 'eth') {
           // For non-ETH tokens with no price data
-          console.log(`No price data found for ${token.symbol}`);
+          // Assign a small value for tokens without prices but with balance
+          if (token.amount > 0) {
+            // Assign a proportional minimal value based on token amount to improve visualization
+            // Higher token amounts are likely airdrops or memecoins with very low value
+            const magnitude = Math.log10(token.amount);
+            const minPrice = Math.max(0.0001, 0.1 / Math.pow(10, magnitude));
+            token.price = minPrice;
+            token.value = token.price * token.amount;
+            token.change24h = 0;
+            console.log(`No price data found for ${token.symbol}, assigned minimal value: $${token.price}`);
+          } else {
+            console.log(`No price data found for ${token.symbol}`);
+          }
         }
       });
     } catch (error) {

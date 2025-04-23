@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json, jsonb, unique, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -88,3 +88,40 @@ export const portfolioSchema = z.object({
 });
 
 export type Portfolio = z.infer<typeof portfolioSchema>;
+
+// Database tables for caching
+
+// Cache wallets to reduce API calls
+export const walletCache = pgTable("wallet_cache", {
+  address: text('address').notNull(),
+  chain: text('chain').notNull(),
+  lastAnalyzed: timestamp('last_analyzed').notNull().defaultNow(),
+  portfolioData: jsonb('portfolio_data').notNull(),
+}, (table) => {
+  return {
+    pk: primaryKey(table.address, table.chain)
+  }
+});
+
+export const insertWalletCacheSchema = createInsertSchema(walletCache);
+export type InsertWalletCache = z.infer<typeof insertWalletCacheSchema>;
+export type WalletCache = typeof walletCache.$inferSelect;
+
+// Cache token prices to reduce API calls
+export const tokenPrices = pgTable("token_prices", {
+  symbol: text('symbol').notNull().primaryKey(),
+  price: jsonb('price').notNull(), // Store full price object with 24h change
+  lastUpdated: timestamp('last_updated').notNull().defaultNow(),
+});
+
+export const insertTokenPriceSchema = createInsertSchema(tokenPrices);
+export type InsertTokenPrice = z.infer<typeof insertTokenPriceSchema>;
+export type TokenPrice = typeof tokenPrices.$inferSelect;
+
+// Token whitelist for known good tokens to prioritize price fetching
+export const tokenWhitelist = pgTable("token_whitelist", {
+  symbol: text('symbol').notNull().primaryKey(),
+  name: text('name').notNull(),
+  coingeckoId: text('coingecko_id').notNull(),
+  isPopular: boolean('is_popular').notNull().default(false),
+});
