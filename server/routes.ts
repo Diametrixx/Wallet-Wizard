@@ -24,6 +24,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (error) {
     console.error("Error initializing database:", error);
   }
+  
+  // API endpoint to detect blockchain chain from address format
+  app.post("/api/detect-chain", async (req, res) => {
+    try {
+      // Validate the request body
+      const address = req.body.address;
+      
+      if (!address) {
+        return res.status(400).json({ 
+          message: "Address is required",
+          chain: "unknown"
+        });
+      }
+      
+      // Detect the chain from the address format
+      let chain = "unknown";
+      
+      // Ethereum address format: 0x followed by 40 hex characters
+      if (address.match(/^0x[a-fA-F0-9]{40}$/)) {
+        chain = "ethereum";
+      }
+      // Solana address: base58 encoded, 32-44 characters, not starting with 0x
+      else if (address.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
+        chain = "solana";
+      }
+      
+      return res.json({ chain });
+    } catch (error) {
+      console.error("Error detecting chain:", error);
+      res.status(500).json({ 
+        message: "An error occurred detecting the chain",
+        chain: "unknown"
+      });
+    }
+  });
 
   // API endpoint to analyze a wallet
 
