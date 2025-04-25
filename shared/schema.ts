@@ -125,3 +125,41 @@ export const tokenWhitelist = pgTable("token_whitelist", {
   coingeckoId: text('coingecko_id').notNull(),
   isPopular: boolean('is_popular').notNull().default(false),
 });
+
+//from CHATGPT:
+
+import { pgTable, text, real, serial, timestamp } from "drizzle-orm/pg-core";
+
+// Enriched transactions for a wallet (used for P&L + recent activity)
+export const enrichedTransactions = pgTable("enriched_transactions", {
+  id: serial("id").primaryKey(),
+  walletAddress: text("wallet_address").notNull(),
+  signature: text("signature").notNull(),
+  tokenSymbol: text("token_symbol"),
+  tokenMint: text("token_mint"),
+  amount: real("amount"),
+  direction: text("direction"), // "in" or "out"
+  usdValue: real("usd_value"),
+  timestamp: timestamp("timestamp").notNull(),
+});
+
+// Token holdings snapshot (used for current allocation + performance calc)
+export const tokenHoldings = pgTable("token_holdings", {
+  id: serial("id").primaryKey(),
+  walletAddress: text("wallet_address").notNull(),
+  tokenSymbol: text("token_symbol").notNull(),
+  tokenMint: text("token_mint").notNull(),
+  quantity: real("quantity"),
+  currentUsdPrice: real("current_usd_price"),
+  totalUsdValue: real("total_usd_value"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Historical token prices (used for portfolio value over time)
+export const historicalTokenPrices = pgTable("historical_token_prices", {
+  id: serial("id").primaryKey(),
+  tokenMint: text("token_mint"),
+  tokenSymbol: text("token_symbol"),
+  timestamp: timestamp("timestamp"),
+  usdPrice: real("usd_price"),
+});
