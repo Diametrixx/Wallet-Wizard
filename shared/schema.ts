@@ -56,6 +56,21 @@ export const transactionSchema = z.object({
 export type Transaction = z.infer<typeof transactionSchema>;
 
 // Portfolio schema for the entire wallet analysis
+export const timeFrameSchema = z.object({
+  period: z.enum(["all", "year", "sixMonths", "threeMonths"]),
+  profit: z.number(),
+  performancePercentage: z.number(),
+  performance: z.enum(["excellent", "good", "neutral", "bad", "terrible"]),
+  startDate: z.string(),
+  endDate: z.string(),
+  timeSeriesData: z.array(z.object({
+    date: z.string(),
+    value: z.number(),
+  })),
+});
+
+export type TimeFrame = z.infer<typeof timeFrameSchema>;
+
 export const portfolioSchema = z.object({
   wallet: walletSchema,
   totalValue: z.number(),
@@ -73,10 +88,17 @@ export const portfolioSchema = z.object({
     percentage: z.number(),
     color: z.string(),
   })),
+  // Default time series data (for backward compatibility)
   timeSeriesData: z.array(z.object({
     date: z.string(),
     value: z.number(),
   })),
+  // Time frame-specific data
+  timeFrames: z.array(timeFrameSchema).optional(),
+  // The currently selected time frame
+  selectedTimeFrame: z.enum(["all", "year", "sixMonths", "threeMonths"]).default("all"),
+  // First transaction date (wallet creation or earliest tracked transaction)
+  walletCreationDate: z.string().optional(),
   memeRank: z.string(),
   memeSummary: z.string(),
   memeImage: z.string(),
