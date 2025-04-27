@@ -451,9 +451,9 @@ function calculatePortfolioMetrics(
   // Sort tokens by value (descending)
   tokens.sort((a, b) => b.value - a.value);
   
-  // Sort winners and losers by absolute change
-  winners.sort((a, b) => b.change24h - a.change24h);
-  losers.sort((a, b) => a.change24h - b.change24h);
+  // Sort winners and losers by absolute change, handling optional values
+  winners.sort((a, b) => (b.change24h || 0) - (a.change24h || 0));
+  losers.sort((a, b) => (a.change24h || 0) - (b.change24h || 0));
   
   // Limit to top 5 for each
   const topWinners = winners.slice(0, 5);

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json, jsonb, unique, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json, jsonb, unique, primaryKey, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -129,8 +129,7 @@ export const tokenWhitelist = pgTable("token_whitelist", {
 });
 
 //from CHATGPT:
-
-import { pgTable, text, real, serial, timestamp } from "drizzle-orm/pg-core";
+// Note: Imported already above, just using what's already imported
 
 // Enriched transactions for a wallet (used for P&L + recent activity)
 export const enrichedTransactions = pgTable("enriched_transactions", {
