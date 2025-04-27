@@ -46,29 +46,54 @@ export async function analyzeWalletPerformance(address: string): Promise<Portfol
   console.log(`🔎 Starting in-depth wallet analysis for: ${address}`);
   
   try {
-    // Step 1: Fetch parsed transaction history directly using the Helius endpoint
+    // Step 1: Get current token balances first (this should work even if transaction history doesn't)
+    const tokenBalances = await getTokenBalances(address);
+    console.log(`💰 Found ${tokenBalances.tokens.length} tokens in wallet and ${tokenBalances.nativeBalance || 0} lamports of SOL`);
+    
+    let hasActiveWallet = tokenBalances.nativeBalance > 0 || (tokenBalances.tokens && tokenBalances.tokens.length > 0);
+    if (!hasActiveWallet) {
+      console.warn("⚠️ No tokens or SOL found in this wallet. It may be inactive.");
+    }
+    
+    // Step 2: Fetch parsed transaction history directly using the Helius endpoint
     // This is more efficient than fetching signatures and then enriching them
     const parsedTransactions = await fetchParsedTransactionHistory(address, 150);
     console.log(`📊 Retrieved ${parsedTransactions.length} parsed transactions`);
     
-    if (parsedTransactions.length === 0) {
-      throw new Error("No transaction history found for this wallet");
+    let acquisitions = {};
+    let tokenHistory = [];
+    
+    // Step 3: Process transaction history if available
+    if (parsedTransactions.length > 0) {
+      // Process token transfers to track purchase history
+      const processingResult = await processTokenTransfers(parsedTransactions, address);
+      acquisitions = processingResult.acquisitions;
+      tokenHistory = processingResult.tokenHistory;
+      console.log(`🧮 Analyzed ${Object.keys(acquisitions).length} token acquisition histories`);
+    } else {
+      console.warn("⚠️ No transaction history found, but continuing with current balance analysis");
+      
+      // Create simplified acquisition records based on current holdings
+      tokenBalances.tokens?.forEach(token => {
+        if (token.mint) {
+          acquisitions[token.mint] = {
+            totalAmount: parseFloat(token.amount || "0"),
+            avgPrice: 0, // We don't know acquisition price
+            firstAcquired: Date.now() - (30 * 24 * 60 * 60 * 1000), // Assume 30 days ago
+            transactions: []
+          };
+        }
+      });
     }
     
-    // Step 2: Get current token balances using the updated Helius service
-    const tokenBalances = await getTokenBalances(address);
-    console.log(`💰 Found ${tokenBalances.tokens.length} tokens in wallet`);
-    
-    // Step 3: Process token transfers to track purchase history 
-    const { acquisitions, tokenHistory } = await processTokenTransfers(parsedTransactions, address);
-    console.log(`🧮 Analyzed ${Object.keys(acquisitions).length} token acquisition histories`);
-    
     // Step 4: Get current prices for all tokens in the wallet
-    const { currentPrices, priceChanges } = await getCurrentTokenPrices(tokenBalances.tokens);
+    const { currentPrices, priceChanges } = await getCurrentTokenPrices(tokenBalances.tokens || []);
     console.log(`💵 Retrieved current prices for ${Object.keys(currentPrices).length} tokens`);
     
     // Step 5: Enhance token data with metadata from Helius
-    await enhanceTokensWithMetadata(tokenBalances.tokens);
+    if (tokenBalances.tokens && tokenBalances.tokens.length > 0) {
+      await enhanceTokensWithMetadata(tokenBalances.tokens);
+    }
     
     // Step 6: Calculate wallet metrics and portfolio performance
     const portfolioData = calculatePortfolioMetrics(

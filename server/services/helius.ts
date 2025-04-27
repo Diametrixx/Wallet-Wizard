@@ -1,5 +1,6 @@
 // server/services/helius.ts
 import axios from "axios";
+import * as solWeb3 from '@solana/web3.js';
 
 // Use the provided Helius API key
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "5ad98011-c959-40fd-b12f-2cbbcca72088";
@@ -101,22 +102,57 @@ export async function fetchEnrichedTransactions(signatures: string[]): Promise<a
  * Fetch parsed transaction history for a wallet address directly
  * Uses the endpoint specified in your message
  */
-export async function fetchParsedTransactionHistory(walletAddress: string, limit = 100): Promise<any[]> {
+export async function fetchParsedTransactionHistory(walletAddress: string, maxTransactions = 100): Promise<any[]> {
   try {
     console.log(`🔍 Fetching parsed transaction history for wallet ${walletAddress}`);
     
-    const url = `${HELIUS_BASE_URL}/addresses/${walletAddress}/transactions/?api-key=${HELIUS_API_KEY}&limit=${limit}`;
-    const response = await axios.get(url);
+    // Based on the API docs, we should not include the limit parameter directly in the URL
+    // First try with the v0 API format
+    const url = `${HELIUS_BASE_URL}/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}`;
     
-    if (response.status !== 200 || !response.data) {
-      console.error("❌ Helius parsed transactions fetch failed:", response.statusText);
-      return [];
+    try {
+      const response = await axios.get(url);
+      
+      if (response.status === 200 && response.data && Array.isArray(response.data)) {
+        console.log(`📊 Retrieved ${response.data.length} parsed transactions with v0 API`);
+        return response.data.slice(0, maxTransactions); // Limit array size instead of API parameter
+      }
+    } catch (err) {
+      console.log("v0 API format failed, trying v1 format...");
     }
     
-    console.log(`📊 Retrieved ${response.data.length} parsed transactions`);
-    return response.data;
+    // Try with the v1 API format which might have different parameters
+    const v1url = `https://api.helius.xyz/v1/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}`;
+    const v1response = await axios.get(v1url);
+    
+    if (v1response.status === 200 && v1response.data && Array.isArray(v1response.data)) {
+      console.log(`📊 Retrieved ${v1response.data.length} parsed transactions with v1 API`);
+      return v1response.data.slice(0, maxTransactions);
+    } else if (v1response.status === 200 && v1response.data && v1response.data.data) {
+      // Some APIs wrap the result in a data property
+      console.log(`📊 Retrieved ${v1response.data.data.length} parsed transactions with v1 API (data wrapper)`);
+      return v1response.data.data.slice(0, maxTransactions);
+    }
+    
+    console.error("❌ Helius parsed transactions fetch failed with both v0 and v1 formats");
+    return [];
+    
   } catch (error) {
     console.error("❌ Failed to fetch parsed transaction history:", error);
+    
+    // Fall back to using raw signatures if the parsed transaction endpoint fails
+    try {
+      console.log("Falling back to signatures + enrichment method");
+      const signatures = await fetchSignatures(walletAddress);
+      
+      if (signatures.length > 0) {
+        const enriched = await fetchEnrichedTransactions(signatures.slice(0, 50)); // Process up to 50 signatures
+        return enriched;
+      }
+    } catch (fallbackError) {
+      console.error("Fallback method also failed:", fallbackError);
+    }
+    
     return [];
   }
 }
@@ -145,16 +181,47 @@ export async function getHeliusTokenMetadata(mintAddress: string) {
  */
 export async function getTokenBalances(walletAddress: string) {
   try {
-    const response = await axios.get(`${HELIUS_BASE_URL}/addresses/${walletAddress}/balances?api-key=${HELIUS_API_KEY}`);
-    
-    if (response.status !== 200) {
-      console.error(`❌ Failed to fetch token balances: ${response.statusText}`);
-      return { tokens: [], nativeBalance: 0 };
+    // Try v0 API first
+    try {
+      const response = await axios.get(`${HELIUS_BASE_URL}/addresses/${walletAddress}/balances?api-key=${HELIUS_API_KEY}`);
+      
+      if (response.status === 200 && response.data) {
+        console.log(`💰 Fetched token balances successfully with v0 API`);
+        return response.data;
+      }
+    } catch (e) {
+      console.log("v0 balances API failed, trying v1...");
     }
     
-    return response.data;
+    // Try v1 API format
+    const v1response = await axios.get(`https://api.helius.xyz/v1/addresses/${walletAddress}/balances?api-key=${HELIUS_API_KEY}`);
+    
+    if (v1response.status === 200 && v1response.data) {
+      console.log(`💰 Fetched token balances successfully with v1 API`);
+      return v1response.data;
+    }
+    
+    // If we reach here, both API calls failed but didn't throw an exception
+    console.error(`❌ Failed to fetch token balances: Both API versions returned non-200 status`);
+    return { tokens: [], nativeBalance: 0 };
+    
   } catch (error) {
     console.error("❌ Error fetching token balances:", error);
-    return { tokens: [], nativeBalance: 0 };
+    
+    // As a fallback, we can use Solana RPC directly to get the SOL balance at least
+    try {
+      const connection = new solWeb3.Connection('https://api.mainnet-beta.solana.com');
+      const publicKey = new solWeb3.PublicKey(walletAddress);
+      
+      const balance = await connection.getBalance(publicKey);
+      console.log(`💰 Fetched SOL balance using Solana RPC fallback: ${balance / 1e9} SOL`);
+      return {
+        tokens: [],
+        nativeBalance: balance
+      };
+    } catch (fallbackError) {
+      console.error("Fallback to Solana RPC also failed:", fallbackError);
+      return { tokens: [], nativeBalance: 0 };
+    }
   }
 }
