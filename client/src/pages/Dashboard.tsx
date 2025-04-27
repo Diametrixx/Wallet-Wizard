@@ -34,15 +34,15 @@ export default function Dashboard() {
     enabled: !!address && !!chain,
     queryFn: async () => {
       if (!address || !chain) return null;
-      
+
       try {
         console.log(`Analyzing wallet: ${address} on chain: ${chain} with forced refresh`);
         const res = await apiRequest("POST", "/api/analyze", { 
           address, 
           chain,
-          forceRefresh: true // Always force refresh to get the latest data
+          forceRefresh: true
         });
-        
+
         const data = await res.json();
         console.log("Analysis completed:", data);
         return data;
@@ -89,71 +89,46 @@ export default function Dashboard() {
     return <LoadingScreen progress={80} status="Processing portfolio data..." />;
   }
 
-  // Track the selected time frame 
-  const [selectedTimeFrame, setSelectedTimeFrame] = useState<"all" | "year" | "sixMonths" | "threeMonths">(
-    portfolio.selectedTimeFrame || "all"
-  );
-
-  // Handle time frame changes
-  const handleTimeFrameChange = (timeFrame: "all" | "year" | "sixMonths" | "threeMonths") => {
-    setSelectedTimeFrame(timeFrame);
-  };
-
   return (
     <div>
-      {/* Portfolio Summary with time frame selection */}
-      <PortfolioSummary 
-        portfolio={portfolio}
-        onTimeFrameChange={handleTimeFrameChange}
-      />
-      
-      {/* Dashboard Tiles */}
+      <PortfolioSummary portfolio={portfolio} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {/* Portfolio Chart with selected time frame */}
         <div className="col-span-full">
-          <PortfolioChart 
-            portfolio={portfolio}
-            timeFrame={selectedTimeFrame}
-          />
+          <PortfolioChart portfolio={portfolio} />
         </div>
-        
-        {/* Top Winners */}
+
         <TokenList 
           title="TOP WINNERS" 
           titleColor="text-cyber-green" 
           tokens={portfolio.topWinners} 
           bgColorClass="bg-cyber-green/10" 
         />
-        
-        {/* Top Losers */}
+
         <TokenList 
           title="TOP LOSERS" 
           titleColor="text-cyber-pink" 
           tokens={portfolio.topLosers} 
           bgColorClass="bg-cyber-pink/10" 
         />
-        
-        {/* Portfolio Allocation */}
+
         <AllocationChart 
           title="PORTFOLIO ALLOCATION" 
           titleColor="text-cyber-yellow" 
           allocationData={portfolio.allocationData} 
         />
-        
-        {/* Trading Strategy */}
+
         <StrategyAnalysis 
           tradingMetrics={portfolio.tradingMetrics} 
         />
       </div>
-      
-      {/* Meme Summary */}
+
       <MemeSummary 
         memeRank={portfolio.memeRank}
         memeSummary={portfolio.memeSummary}
         memeImage={portfolio.memeImage}
       />
 
-      {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row justify-center gap-4 mb-8">
         <Button 
           variant="outline" 
