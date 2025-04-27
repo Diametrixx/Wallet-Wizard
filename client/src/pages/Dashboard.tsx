@@ -8,8 +8,7 @@ import PortfolioSummary from "@/components/PortfolioSummary";
 import PortfolioChart from "@/components/PortfolioChart";
 import TokenList from "@/components/TokenList";
 import AllocationChart from "@/components/AllocationChart";
-import TransactionHistory from "@/components/TransactionHistory";
-import TradingStrategy from "@/components/TradingStrategy";
+import StrategyAnalysis from "@/components/StrategyAnalysis";
 import MemeSummary from "@/components/MemeSummary";
 import { Button } from "@/components/ui/button";
 import { Download, Share2, Search } from "lucide-react";
@@ -90,16 +89,32 @@ export default function Dashboard() {
     return <LoadingScreen progress={80} status="Processing portfolio data..." />;
   }
 
+  // Track the selected time frame 
+  const [selectedTimeFrame, setSelectedTimeFrame] = useState<"all" | "year" | "sixMonths" | "threeMonths">(
+    portfolio.selectedTimeFrame || "all"
+  );
+
+  // Handle time frame changes
+  const handleTimeFrameChange = (timeFrame: "all" | "year" | "sixMonths" | "threeMonths") => {
+    setSelectedTimeFrame(timeFrame);
+  };
+
   return (
     <div>
-      {/* Portfolio Summary Card */}
-      <PortfolioSummary portfolio={portfolio} />
+      {/* Portfolio Summary with time frame selection */}
+      <PortfolioSummary 
+        portfolio={portfolio}
+        onTimeFrameChange={handleTimeFrameChange}
+      />
       
       {/* Dashboard Tiles */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {/* Portfolio Value Chart */}
+        {/* Portfolio Chart with selected time frame */}
         <div className="col-span-full">
-          <PortfolioChart timeSeriesData={portfolio.timeSeriesData} />
+          <PortfolioChart 
+            portfolio={portfolio}
+            timeFrame={selectedTimeFrame}
+          />
         </div>
         
         {/* Top Winners */}
@@ -125,14 +140,9 @@ export default function Dashboard() {
           allocationData={portfolio.allocationData} 
         />
         
-        {/* Transaction History */}
-        <TransactionHistory 
-          transactions={portfolio.transactions || []} 
-        />
-        
         {/* Trading Strategy */}
-        <TradingStrategy 
-          metrics={portfolio.tradingMetrics} 
+        <StrategyAnalysis 
+          tradingMetrics={portfolio.tradingMetrics} 
         />
       </div>
       
@@ -142,7 +152,7 @@ export default function Dashboard() {
         memeSummary={portfolio.memeSummary}
         memeImage={portfolio.memeImage}
       />
-      
+
       {/* Action Buttons */}
       <div className="flex flex-col sm:flex-row justify-center gap-4 mb-8">
         <Button 
