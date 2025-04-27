@@ -1,12 +1,17 @@
 // server/services/walletAnalyzer.ts
 import axios from "axios";
 import { Portfolio, Token, Transaction } from "@shared/schema";
-import { fetchSignatures } from "./helius";
+import { 
+  fetchParsedTransactionHistory, 
+  fetchSignatures, 
+  getHeliusTokenMetadata,
+  getTokenBalances
+} from "./helius";
 import { coinGeckoMapping } from "./coinGeckoMap";
 import { storage } from "../storage";
 
 // Constants
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "5ad98011-c959-40fd-b12f-2cbbcca72088";
 const HELIUS_BASE_URL = "https://api.helius.xyz/v0";
 const JUPITER_PRICE_API = "https://price.jup.ag/v4/price";
 
@@ -41,29 +46,29 @@ export async function analyzeWalletPerformance(address: string): Promise<Portfol
   console.log(`🔎 Starting in-depth wallet analysis for: ${address}`);
   
   try {
-    // Step 1: Fetch all wallet signatures for historical data
-    const signatures = await fetchSignatures(address);
-    console.log(`📝 Retrieved ${signatures.length} transaction signatures`);
+    // Step 1: Fetch parsed transaction history directly using the Helius endpoint
+    // This is more efficient than fetching signatures and then enriching them
+    const parsedTransactions = await fetchParsedTransactionHistory(address, 150);
+    console.log(`📊 Retrieved ${parsedTransactions.length} parsed transactions`);
     
-    if (signatures.length === 0) {
+    if (parsedTransactions.length === 0) {
       throw new Error("No transaction history found for this wallet");
     }
     
-    // Step 2: Fetch enriched transaction data from Helius (in chunks)
-    const enrichedTransactions = await fetchEnrichedTransactions(signatures);
-    console.log(`📊 Processed ${enrichedTransactions.length} enriched transactions`);
-    
-    // Step 3: Get current token balances
-    const tokenBalances = await fetchTokenBalances(address);
+    // Step 2: Get current token balances using the updated Helius service
+    const tokenBalances = await getTokenBalances(address);
     console.log(`💰 Found ${tokenBalances.tokens.length} tokens in wallet`);
     
-    // Step 4: Process token transfers to track purchase history 
-    const { acquisitions, tokenHistory } = await processTokenTransfers(enrichedTransactions, address);
+    // Step 3: Process token transfers to track purchase history 
+    const { acquisitions, tokenHistory } = await processTokenTransfers(parsedTransactions, address);
     console.log(`🧮 Analyzed ${Object.keys(acquisitions).length} token acquisition histories`);
     
-    // Step 5: Get current prices for all tokens in the wallet
+    // Step 4: Get current prices for all tokens in the wallet
     const { currentPrices, priceChanges } = await getCurrentTokenPrices(tokenBalances.tokens);
     console.log(`💵 Retrieved current prices for ${Object.keys(currentPrices).length} tokens`);
+    
+    // Step 5: Enhance token data with metadata from Helius
+    await enhanceTokensWithMetadata(tokenBalances.tokens);
     
     // Step 6: Calculate wallet metrics and portfolio performance
     const portfolioData = calculatePortfolioMetrics(
@@ -84,58 +89,33 @@ export async function analyzeWalletPerformance(address: string): Promise<Portfol
 }
 
 /**
- * Fetch enriched transaction data from Helius in chunks
+ * Enhance token data with metadata from Helius
+ * This adds information like token name, symbol, and image URL
  */
-async function fetchEnrichedTransactions(signatures: string[]): Promise<any[]> {
-  const enriched: any[] = [];
-  const CHUNK_SIZE = 100; // Helius API limit
-  
-  for (let i = 0; i < signatures.length; i += CHUNK_SIZE) {
+async function enhanceTokensWithMetadata(tokens: any[]): Promise<void> {
+  const enhancementPromises = tokens.map(async (token) => {
+    // Skip tokens that already have good metadata
+    if (token.name && token.symbol && token.image) return;
+    
     try {
-      const chunk = signatures.slice(i, i + CHUNK_SIZE);
-      console.log(`📤 Fetching enriched data for transactions ${i+1}-${i+chunk.length}`);
-      
-      const response = await axios.post(
-        `${HELIUS_BASE_URL}/transactions?api-key=${HELIUS_API_KEY}`,
-        { transactions: chunk }
-      );
-      
-      if (response.status === 200 && response.data) {
-        enriched.push(...response.data);
-      } else {
-        console.warn(`⚠️ Failed to fetch data for chunk starting at ${i}`);
+      const metadata = await getHeliusTokenMetadata(token.mint);
+      if (metadata) {
+        if (!token.name && metadata.name) token.name = metadata.name;
+        if (!token.symbol && metadata.symbol) token.symbol = metadata.symbol;
+        if (!token.image && metadata.image) token.image = metadata.image;
       }
-      
-      // Add a small delay to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
     } catch (error) {
-      console.error(`❌ Error fetching transaction data for chunk:`, error);
+      // Silently fail on metadata enhancement
+      console.warn(`Could not enhance token metadata for ${token.mint}`);
     }
-  }
+  });
   
-  return enriched;
+  // Wait for all enhancement requests to complete
+  await Promise.all(enhancementPromises);
 }
 
-/**
- * Fetch token balances for a wallet address
- */
-async function fetchTokenBalances(address: string): Promise<any> {
-  try {
-    const response = await axios.get(
-      `${HELIUS_BASE_URL}/addresses/${address}/balances?api-key=${HELIUS_API_KEY}`
-    );
-    
-    if (response.status !== 200) {
-      throw new Error(`Failed to fetch token balances: ${response.statusText}`);
-    }
-    
-    return response.data;
-  } catch (error) {
-    console.error("❌ Error fetching token balances:", error);
-    throw error;
-  }
-}
+// Note: The fetchEnrichedTransactions and getTokenBalances are now imported from helius.ts
+// So we remove the duplicated functions here
 
 /**
  * Process token transfers to track acquisition history and token movements
@@ -388,9 +368,10 @@ function calculatePortfolioMetrics(
     totalValue += solValue;
     
     // Check if this is a winner or loser
-    if (solToken.change24h > 0) {
+    const solChange = solToken.change24h || 0;
+    if (solChange > 0) {
       winners.push(solToken);
-    } else if (solToken.change24h < 0) {
+    } else if (solChange < 0) {
       losers.push(solToken);
     }
     

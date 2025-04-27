@@ -61,6 +61,8 @@ export const portfolioSchema = z.object({
   totalValue: z.number(),
   allTimeProfit: z.number(),
   performancePercentage: z.number(),
+  // Performance category based on calculations
+  performance: z.enum(["excellent", "good", "neutral", "bad", "terrible"]).optional(),
   tokens: z.array(tokenSchema),
   topWinners: z.array(tokenSchema),
   topLosers: z.array(tokenSchema),

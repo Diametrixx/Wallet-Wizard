@@ -1,94 +1,103 @@
-import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { calculatePerformanceLevel } from '@/lib/utils';
-import type { PortfolioData } from '@/components/Dashboard';
+import { useState } from 'react';
+import axios from 'axios';
+import { Portfolio } from '@shared/schema';
 
 interface UseWalletAnalysisProps {
-  walletAddress: string;
+  initialAddress?: string;
 }
 
-export const useWalletAnalysis = ({ walletAddress }: UseWalletAnalysisProps) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [progress, setProgress] = useState(0);
-  const [currentTask, setCurrentTask] = useState("Fetching wallet transactions...");
-  const [nextTask, setNextTask] = useState("Analyzing token transfers...");
+interface UseWalletAnalysisResult {
+  address: string;
+  setAddress: (address: string) => void;
+  chain: 'ethereum' | 'solana' | 'unknown';
+  portfolio: Portfolio | null;
+  loading: boolean;
+  error: string | null;
+  analyzeWallet: (forceRefresh?: boolean) => Promise<void>;
+  resetError: () => void;
+}
+
+export default function useWalletAnalysis({ initialAddress = '' }: UseWalletAnalysisProps = {}): UseWalletAnalysisResult {
+  const [address, setAddress] = useState<string>(initialAddress);
+  const [chain, setChain] = useState<'ethereum' | 'solana' | 'unknown'>('unknown');
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Query wallet data from API
-  const { data, isError, isSuccess } = useQuery({
-    queryKey: [`/api/wallet/${walletAddress}`],
-    enabled: !!walletAddress,
-    retry: 1,
-  });
 
-  // Simulate loading progress
-  useEffect(() => {
-    if (!walletAddress) return;
-    
-    let progressInterval: NodeJS.Timeout;
-    
-    // Start simulating progress if we're still loading
-    if (isLoading && !isSuccess && !isError) {
-      let currentProgress = 0;
-      const tasks = [
-        { current: "Fetching wallet transactions...", next: "Analyzing token transfers..." },
-        { current: "Analyzing token transfers...", next: "Calculating your paper hands moments..." },
-        { current: "Calculating your paper hands moments...", next: "Determining your degen level..." },
-        { current: "Determining your degen level...", next: "Generating your crypto persona..." },
-        { current: "Generating your crypto persona...", next: "Almost there! Processing final results..." }
-      ];
+  // Reset error state
+  const resetError = () => {
+    setError(null);
+  };
 
-      progressInterval = setInterval(() => {
-        currentProgress += 2;
-        
-        // Update task messages based on progress
-        const taskIndex = Math.min(Math.floor(currentProgress / 20), tasks.length - 1);
-        setCurrentTask(tasks[taskIndex].current);
-        setNextTask(tasks[taskIndex].next);
-        
-        setProgress(currentProgress);
-        
-        if (currentProgress >= 95) {
-          clearInterval(progressInterval);
-        }
-      }, 200);
+  // Detect chain from address
+  const detectChain = async (address: string): Promise<'ethereum' | 'solana' | 'unknown'> => {
+    try {
+      const response = await axios.post('/api/detect-chain', { address });
+      return response.data.chain;
+    } catch (error) {
+      console.error('Error detecting chain:', error);
+      return 'unknown';
     }
-    
-    // If data loaded successfully, jump to 100%
-    if (isSuccess) {
-      setProgress(100);
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 500);
-    }
-    
-    // If error occurred, stop at current progress
-    if (isError) {
-      clearInterval(progressInterval);
-      setError("Failed to analyze wallet. Please check the address and try again.");
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 500);
-    }
-    
-    return () => {
-      if (progressInterval) clearInterval(progressInterval);
-    };
-  }, [walletAddress, isLoading, isSuccess, isError]);
+  };
 
-  // Process the data when it's available
-  const processedData: PortfolioData | null = data ? {
-    ...data,
-    performance: calculatePerformanceLevel(data.percentChange),
-  } : null;
+  // Analyze wallet with performance tracking
+  const analyzeWallet = async (forceRefresh: boolean = false) => {
+    resetError();
+    
+    if (!address) {
+      setError('Please enter a wallet address');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      // First detect the chain
+      const detectedChain = await detectChain(address);
+      setChain(detectedChain);
+      
+      if (detectedChain === 'unknown') {
+        setError('Invalid wallet address format');
+        setLoading(false);
+        return;
+      }
+      
+      // Use our new enhanced wallet analysis endpoint
+      const response = await axios.post('/api/analyze', {
+        address,
+        chain: detectedChain,
+        forceRefresh
+      });
+      
+      setPortfolio(response.data);
+      
+    } catch (error: any) {
+      console.error('Error analyzing wallet:', error);
+      
+      // Extract the most useful error message
+      let errorMessage = 'Failed to analyze wallet';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return {
-    isLoading,
-    progress,
-    currentTask,
-    nextTask,
+    address,
+    setAddress,
+    chain,
+    portfolio,
+    loading,
     error,
-    data: processedData,
+    analyzeWallet,
+    resetError
   };
-};
+}
