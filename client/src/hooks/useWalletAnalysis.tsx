@@ -4,6 +4,7 @@ import { Portfolio } from '@shared/schema';
 
 interface UseWalletAnalysisProps {
   initialAddress?: string;
+  initialTimeFrame?: "all" | "year" | "sixMonths" | "threeMonths";
 }
 
 interface UseWalletAnalysisResult {
@@ -13,16 +14,22 @@ interface UseWalletAnalysisResult {
   portfolio: Portfolio | null;
   loading: boolean;
   error: string | null;
+  timeFrame: "all" | "year" | "sixMonths" | "threeMonths";
+  setTimeFrame: (timeFrame: "all" | "year" | "sixMonths" | "threeMonths") => void;
   analyzeWallet: (forceRefresh?: boolean) => Promise<void>;
   resetError: () => void;
 }
 
-export default function useWalletAnalysis({ initialAddress = '' }: UseWalletAnalysisProps = {}): UseWalletAnalysisResult {
+export default function useWalletAnalysis({ 
+  initialAddress = '', 
+  initialTimeFrame = 'all' 
+}: UseWalletAnalysisProps = {}): UseWalletAnalysisResult {
   const [address, setAddress] = useState<string>(initialAddress);
   const [chain, setChain] = useState<'ethereum' | 'solana' | 'unknown'>('unknown');
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [timeFrame, setTimeFrame] = useState<"all" | "year" | "sixMonths" | "threeMonths">(initialTimeFrame);
 
   // Reset error state
   const resetError = () => {
@@ -62,14 +69,20 @@ export default function useWalletAnalysis({ initialAddress = '' }: UseWalletAnal
         return;
       }
       
-      // Use our new enhanced wallet analysis endpoint
+      // Use our new enhanced wallet analysis endpoint with time frame
       const response = await axios.post('/api/analyze', {
         address,
         chain: detectedChain,
-        forceRefresh
+        forceRefresh,
+        timeFrame // Include current time frame selection
       });
       
       setPortfolio(response.data);
+      
+      // Update local time frame to match what was returned from API
+      if (response.data.selectedTimeFrame) {
+        setTimeFrame(response.data.selectedTimeFrame);
+      }
       
     } catch (error: any) {
       console.error('Error analyzing wallet:', error);
@@ -90,6 +103,19 @@ export default function useWalletAnalysis({ initialAddress = '' }: UseWalletAnal
     }
   };
 
+  // Effect to update portfolio with new time frame
+  const updateTimeFrame = (newTimeFrame: "all" | "year" | "sixMonths" | "threeMonths") => {
+    setTimeFrame(newTimeFrame);
+    
+    // If we have a portfolio, update its selected time frame
+    if (portfolio) {
+      setPortfolio({
+        ...portfolio,
+        selectedTimeFrame: newTimeFrame
+      });
+    }
+  };
+
   return {
     address,
     setAddress,
@@ -97,6 +123,8 @@ export default function useWalletAnalysis({ initialAddress = '' }: UseWalletAnal
     portfolio,
     loading,
     error,
+    timeFrame,
+    setTimeFrame: updateTimeFrame,
     analyzeWallet,
     resetError
   };

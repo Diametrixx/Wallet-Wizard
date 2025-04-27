@@ -5,10 +5,10 @@ interface TokenListProps {
   title: string;
   titleColor: string;
   tokens: Token[];
-  bgColorClass: string;
+  bgColorClass?: string;
 }
 
-export default function TokenList({ title, titleColor, tokens, bgColorClass }: TokenListProps) {
+export default function TokenList({ title, titleColor, tokens, bgColorClass = "bg-cyber-dark/30" }: TokenListProps) {
   if (!tokens || tokens.length === 0) {
     return (
       <div className="cyber-card p-6 glow-border">
@@ -40,8 +40,8 @@ export default function TokenList({ title, titleColor, tokens, bgColorClass }: T
           <div className="flex-1">
             <div className="flex justify-between">
               <span className="font-bold">{token.name || token.symbol}</span>
-              <span className={token.change24h >= 0 ? 'text-cyber-green' : 'text-cyber-pink'}>
-                {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(1)}%
+              <span className={(token.change24h || 0) >= 0 ? 'text-cyber-green' : 'text-cyber-pink'}>
+                {(token.change24h || 0) >= 0 ? '+' : ''}{(token.change24h || 0).toFixed(1)}%
               </span>
             </div>
             <div className="flex justify-between text-xs text-gray-400">

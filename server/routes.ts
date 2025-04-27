@@ -49,9 +49,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API endpoint to analyze a wallet with improved performance tracking
   app.post("/api/analyze", async (req, res) => {
     try {
-      // Validate the request body with possible forceRefresh parameter
-      const { address, chain, forceRefresh } = req.body;
+      // Validate the request body with possible forceRefresh parameter and time frame
+      const { address, chain, forceRefresh, timeFrame } = req.body;
       const walletData = walletSchema.parse({ address, chain });
+      
+      // Get time frame from query parameter or request body
+      const selectedTimeFrame = (req.query.timeFrame || timeFrame || "all") as "all" | "year" | "sixMonths" | "threeMonths";
       
       // Import storage to check cache
       const { storage } = await import("./storage");
@@ -71,6 +74,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If we have cached data and not forcing refresh, use it
         if (cachedPortfolio) {
           console.log(`Found cached portfolio data for ${walletData.address}, using it`);
+          
+          // Update the selected time frame if specified
+          if (selectedTimeFrame && selectedTimeFrame !== cachedPortfolio.selectedTimeFrame) {
+            console.log(`Updating selected time frame to ${selectedTimeFrame}`);
+            cachedPortfolio.selectedTimeFrame = selectedTimeFrame;
+          }
+          
           return res.json(cachedPortfolio);
         }
       }
@@ -83,6 +93,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (walletData.chain === "solana") {
         // Use our new enhanced wallet analyzer for Solana
         portfolioData = await analyzeWalletPerformance(walletData.address);
+        
+        // Set the selected time frame
+        portfolioData.selectedTimeFrame = selectedTimeFrame;
       } else {
         throw new Error("Only Solana chain is currently supported with enhanced performance tracking");
       }
