@@ -282,7 +282,7 @@ async function processTokenTransfers(transactions: any[], walletAddress: string)
 }
 
 /**
- * Get current prices for tokens using Jupiter and CoinGecko as fallback
+ * Get current prices for tokens using multiple sources with fallbacks
  */
 async function getCurrentTokenPrices(tokens: any[]): Promise<{
   currentPrices: Record<string, number>,
@@ -291,20 +291,78 @@ async function getCurrentTokenPrices(tokens: any[]): Promise<{
   const currentPrices: Record<string, number> = {};
   const priceChanges: Record<string, number> = {};
   
-  // Get list of mint addresses
-  const mintAddresses = tokens.map(token => token.mint);
+  // Default prices for important tokens in case all APIs fail
+  // These will be overridden if we can fetch real-time prices
+  // Important: We need at least SOL price for the wallet analysis to be useful
+  const defaultPrices: Record<string, number> = {
+    "So11111111111111111111111111111111111111112": 138.24, // SOL
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": 1.0, // USDC
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": 1.0, // USDT
+    "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj": 148.90, // stSOL
+    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So": 149.20, // mSOL
+    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": 0.00002107, // BONK
+    "7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx": 0.62, // GMT
+  };
   
-  // Split into batches of 100 for Jupiter API
+  // Function to try CoinGecko direct price fetch for major tokens
+  const tryDirectCoinGeckoPriceFetch = async () => {
+    try {
+      // Get current prices for major tokens using CoinGecko
+      const response = await axios.get(
+        "https://api.coingecko.com/api/v3/simple/price?ids=solana,usd-coin,tether&vs_currencies=usd&include_24hr_change=true"
+      );
+      
+      if (response.status === 200 && response.data) {
+        // Map CoinGecko IDs to token mints
+        const mapping = {
+          "solana": "So11111111111111111111111111111111111111112",
+          "usd-coin": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "tether": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+        };
+        
+        // Update prices from response
+        for (const [cgId, mint] of Object.entries(mapping)) {
+          if (response.data[cgId]?.usd) {
+            currentPrices[mint] = response.data[cgId].usd;
+            priceChanges[mint] = response.data[cgId].usd_24h_change || 0;
+          }
+        }
+        
+        console.log("📈 Fetched major token prices from CoinGecko directly");
+        return true;
+      }
+    } catch (error) {
+      console.warn("⚠️ Direct CoinGecko price fetch failed", error);
+    }
+    return false;
+  };
+  
+  // Get list of mint addresses from tokens with non-zero balance
+  const mintAddresses = tokens
+    .filter(token => token.mint && parseFloat(token.amount || "0") > 0)
+    .map(token => token.mint);
+    
+  // Add SOL mint address if it's not already in the list
+  const solMint = "So11111111111111111111111111111111111111112";
+  if (!mintAddresses.includes(solMint)) {
+    mintAddresses.push(solMint);
+  }
+  
+  console.log(`🔍 Fetching prices for ${mintAddresses.length} tokens...`);
+  
+  // Try Jupiter API first for best real-time Solana token prices
   const BATCH_SIZE = 100;
+  let jupiterSuccess = false;
+  
   for (let i = 0; i < mintAddresses.length; i += BATCH_SIZE) {
     const batch = mintAddresses.slice(i, i + BATCH_SIZE);
     
     try {
-      // First try Jupiter API for real-time Solana token prices
       const jupiterIds = batch.join(',');
       const jupiterResponse = await axios.get(`${JUPITER_PRICE_API}?ids=${jupiterIds}`);
       
       if (jupiterResponse.status === 200 && jupiterResponse.data?.data) {
+        jupiterSuccess = true;
         const priceData = jupiterResponse.data.data;
         
         // Process each token in the batch
@@ -317,17 +375,37 @@ async function getCurrentTokenPrices(tokens: any[]): Promise<{
         }
       }
     } catch (error) {
-      console.warn(`⚠️ Jupiter price API failed, falling back to cached data`, error);
+      console.warn(`⚠️ Jupiter price API failed for batch ${i}`, error);
     }
   }
   
-  // For tokens that didn't get prices from Jupiter, check our CoinGecko mapping
+  if (jupiterSuccess) {
+    console.log("✅ Successfully fetched some prices from Jupiter");
+  } else {
+    console.warn("⚠️ Jupiter price API failed completely, trying CoinGecko direct fetch");
+    await tryDirectCoinGeckoPriceFetch();
+  }
+  
+  // For tokens that didn't get prices yet, check our cached CoinGecko mapping
   for (const token of tokens) {
-    if (!currentPrices[token.mint] && coinGeckoMapping[token.mint]) {
+    if (token.mint && !currentPrices[token.mint] && coinGeckoMapping[token.mint]) {
       currentPrices[token.mint] = coinGeckoMapping[token.mint].price || 0;
       priceChanges[token.mint] = coinGeckoMapping[token.mint].priceChange24h || 0;
     }
   }
+  
+  // Apply default prices as last resort for important tokens
+  for (const [mint, price] of Object.entries(defaultPrices)) {
+    if (!currentPrices[mint] || currentPrices[mint] === 0) {
+      console.log(`Using default price for important token: ${mint}`);
+      currentPrices[mint] = price;
+      // Default price change is 0 when using hardcoded values
+      priceChanges[mint] = 0;
+    }
+  }
+  
+  console.log(`💲 Retrieved prices for ${Object.keys(currentPrices).length} tokens`);
+  console.log(`SOL price: $${currentPrices[solMint] || 'unknown'}`);
   
   return { currentPrices, priceChanges };
 }
@@ -371,9 +449,17 @@ function calculatePortfolioMetrics(
   let totalProfitLoss = 0;
   
   // Process native SOL balance first
-  const solBalance = balances.nativeBalance / 1e9; // Convert from lamports to SOL
-  const solPrice = currentPrices["So11111111111111111111111111111111111111112"] || 0;
+  // Make sure we have a valid nativeBalance
+  const solBalanceRaw = typeof balances.nativeBalance === 'number' ? balances.nativeBalance : 
+                        typeof balances.nativeBalance === 'string' ? parseInt(balances.nativeBalance) : 0;
+  
+  const solBalance = solBalanceRaw / 1e9; // Convert from lamports to SOL
+  const solMint = "So11111111111111111111111111111111111111112";
+  const solPrice = currentPrices[solMint] || 0;
   const solValue = solBalance * solPrice;
+  
+  console.log(`💰 SOL balance: ${solBalance} SOL at price $${solPrice} = $${solValue}`);
+  
   
   // Add SOL to tokens
   if (solBalance > 0) {
@@ -410,8 +496,13 @@ function calculatePortfolioMetrics(
   }
   
   // Process other tokens
-  for (const token of balances.tokens) {
-    if (token.amount === "0") continue; // Skip zero balances
+  // Ensure we have a tokens array to iterate through
+  const tokensArray = Array.isArray(balances.tokens) ? balances.tokens : [];
+  
+  console.log(`Processing ${tokensArray.length} token balances`);
+  
+  for (const token of tokensArray) {
+    if (!token || !token.mint || token.amount === "0") continue; // Skip invalid or zero balances
     
     const decimals = token.decimals || 0;
     const amount = parseFloat(token.amount) / Math.pow(10, decimals);
