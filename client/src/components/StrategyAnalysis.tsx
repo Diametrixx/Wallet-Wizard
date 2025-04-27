@@ -1,21 +1,18 @@
 import React from 'react';
-import { getRandomItemFromArray } from '@/lib/utils';
 import { performanceSummaries } from '@/assets/memes';
 
 interface StrategyAnalysisProps {
-  strategy: {
+  tradingMetrics: {
     diamondHandsFactor: number;
     degenLevel: number;
     paperHandsRisk: number;
+    strategy: string;
+    suggestion: string;
   };
-  performance: 'excellent' | 'good' | 'neutral' | 'bad' | 'terrible';
 }
 
-const StrategyAnalysis: React.FC<StrategyAnalysisProps> = ({ strategy, performance }) => {
-  const { diamondHandsFactor, degenLevel, paperHandsRisk } = strategy;
-
-  // Get a random performance summary based on performance level
-  const summary = getRandomItemFromArray(performanceSummaries[performance]);
+const StrategyAnalysis: React.FC<StrategyAnalysisProps> = ({ tradingMetrics }) => {
+  const { diamondHandsFactor, degenLevel, paperHandsRisk, strategy, suggestion } = tradingMetrics;
 
   return (
     <div className="cyber-card p-6 glow-border">
@@ -52,29 +49,20 @@ const StrategyAnalysis: React.FC<StrategyAnalysisProps> = ({ strategy, performan
       </div>
       
       <div className="bg-cyber-dark/50 p-3 rounded-md border border-white/10 mb-4">
-        <p className="text-sm">{summary}</p>
+        <p className="text-sm">{strategy}</p>
       </div>
       
       <div className="cyber-card bg-cyber-green/10 p-3 rounded-md border border-cyber-green/20">
         <div className="flex items-center mb-2">
-          <i className="fas fa-robot text-cyber-green mr-2"></i>
-          <h4 className="text-sm font-bold text-cyber-green">AI STRATEGY SUGGESTION</h4>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyber-green mr-2">
+            <path d="M12 2a10 10 0 1 0 10 10 4 4 0 1 1-8 0"></path>
+            <circle cx="12" cy="8" r="2"></circle>
+            <path d="M12 10v4"></path>
+            <path d="M12 18h.01"></path>
+          </svg>
+          <h4 className="text-sm font-bold text-cyber-green">STRATEGY SUGGESTION</h4>
         </div>
-        {performance === 'excellent' && (
-          <p className="text-xs text-gray-300">Consider taking some profits after your strong gains. Even diamond hands should rebalance occasionally.</p>
-        )}
-        {performance === 'good' && (
-          <p className="text-xs text-gray-300">Your strategy is solid. Consider increasing your position in your top performers when the market dips.</p>
-        )}
-        {performance === 'neutral' && (
-          <p className="text-xs text-gray-300">Your balanced approach is safe, but you might be missing opportunities. Consider researching emerging sectors.</p>
-        )}
-        {performance === 'bad' && (
-          <p className="text-xs text-gray-300">Try to avoid selling during downtrends. Set specific targets for entry and exit to avoid emotional decisions.</p>
-        )}
-        {performance === 'terrible' && (
-          <p className="text-xs text-gray-300">Consider focusing on blue chip crypto assets and DCA strategy. Avoid chasing pumps and high-risk tokens.</p>
-        )}
+        <p className="text-xs text-gray-300">{suggestion}</p>
       </div>
     </div>
   );
